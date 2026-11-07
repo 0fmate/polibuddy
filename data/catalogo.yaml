@@ -1,0 +1,317 @@
+# PoliBuddy catalogue: courses, concepts, exercises and typical mistakes.
+#
+# Three engines:
+#   limite  -> the plan is a substitution (e.g. sin 3x ~ 3x); we compute the limit and a table near 0
+#   valore  -> the plan is a value or formula (e.g. t = v0/g); we check what happens with that value
+#   traccia -> the program is run step by step by OUR simulator (never the student's code)
+#
+# Placeholders: {param} = value; {ax} = "3x" (or "x" if a = 1).
+# Text shown in chat uses LaTeX between $...$ (single-quoted YAML strings keep backslashes as-is).
+# Keywords ending with * are prefixes (thrown* matches "thrown"). Slides are placeholders.
+
+corsi:
+  analisi1: {nome: "Calculus I"}
+  fisica1: {nome: "Physics I"}
+  informatica: {nome: "Computer Science"}
+
+concetti:
+  taylor-coseno: {nome: "Taylor expansion of cosine", parole_chiave: ["cos", "cosine"]}
+  taylor-seno: {nome: "Taylor expansion of sine", parole_chiave: ["sin", "sine"]}
+  taylor-esponenziale: {nome: "Taylor expansion of the exponential", parole_chiave: ["e^", "exp", "exponential"]}
+  taylor-tangente: {nome: "Taylor expansion of tangent", parole_chiave: ["tan", "tangent"]}
+  moto-verticale: {nome: "Uniformly accelerated motion", parole_chiave: ["thrown*", "throw*", "upward*", "back to the ground"]}
+  caduta-libera: {nome: "Free fall and energy", parole_chiave: ["falls", "dropped", "free fall", "from rest", "hits the ground"]}
+  cicli-range: {nome: "For loops and range", parole_chiave: ["range"]}
+  cicli-while: {nome: "While loops", parole_chiave: ["while"]}
+
+esercizi:
+  # ---------------------------------------------------------------- Calculus I
+  - id: lim-coseno
+    corso: analisi1
+    motore: limite
+    titolo: "Limit with cosine"
+    tipo: "Limits with Taylor"
+    livello: 1
+    concetti: [taylor-coseno]
+    parametri: {a: [1, 2, 3]}
+    demo: {a: 2}
+    espressione: "(1 - cos(a*x))/x**2"
+    latex: '\lim_{x \to 0} \frac{1 - \cos({ax})}{x^2}'
+    testo: 'Compute $\displaystyle\lim_{x \to 0} \frac{1 - \cos {ax}}{x^2}$'
+    piano_demo: "Near zero cos {ax} is about 1, so the numerator is zero and the limit is 0"
+    slide: "Taylor expansions: cosine (link the course slide here)"
+    errori:
+      - id: coseno-ordine-zero
+        nome: "Cosine approximated with 1"
+        sostituzioni: [{da: "cos(a*x)", a: "1"}]
+        domanda_mirata: 'When you put $1$ in place of $\cos {ax}$, which piece are you throwing away? And how big is it compared to $x^2$ in the denominator?'
+        spunto: 'Try keeping one more term in the expansion of $\cos {ax}$.'
+    regole_offline:
+      - tutte: ["cos"]
+        almeno_una: ["x^2", "squared", "secondorder", "/2"]
+        sostituzioni: [{da: "cos(a*x)", a: "1 - (a*x)**2/2"}]
+        parafrasi: 'So you want to replace $\cos {ax}$ with $1 - \frac{({ax})^2}{2}$ and then simplify, right?'
+      - tutte: ["cos"]
+        almeno_una: ["1", "one"]
+        sostituzioni: [{da: "cos(a*x)", a: "1"}]
+        parafrasi: 'So you want to replace $\cos {ax}$ with $1$, so the numerator becomes zero, right?'
+    vietato: ["/2", "second order", "x^2/2", "frac{"]
+
+  - id: lim-seno
+    corso: analisi1
+    motore: limite
+    titolo: "Limit with sine"
+    tipo: "Limits with Taylor"
+    livello: 2
+    concetti: [taylor-seno]
+    parametri: {a: [2, 3, 4]}
+    demo: {a: 3}
+    espressione: "(a*x - sin(a*x))/x**3"
+    latex: '\lim_{x \to 0} \frac{{ax} - \sin({ax})}{x^3}'
+    testo: 'Compute $\displaystyle\lim_{x \to 0} \frac{{ax} - \sin {ax}}{x^3}$'
+    piano_demo: "Near zero sin {ax} is about {ax}, so the numerator is zero and the limit is 0"
+    slide: "Taylor expansions: sine (link the course slide here)"
+    errori:
+      - id: seno-primo-ordine
+        nome: "Taylor of sine stopped at first order"
+        sostituzioni: [{da: "sin(a*x)", a: "a*x"}]
+        domanda_mirata: 'When you replaced $\sin {ax}$ with ${ax}$, what did you throw away? How big is that piece compared to $x^3$?'
+        spunto: 'Try keeping one more term in the expansion of $\sin {ax}$.'
+    regole_offline:
+      - tutte: ["sin"]
+        almeno_una: ["x^3", "cube", "cubed", "third", "/6"]
+        sostituzioni: [{da: "sin(a*x)", a: "a*x - (a*x)**3/6"}]
+        parafrasi: 'So you want to replace $\sin {ax}$ with ${ax} - \frac{({ax})^3}{6}$ and then simplify, right?'
+      - tutte: ["sin"]
+        almeno_una: ["{ax}", "about", "≈", "~", "equal", "approx"]
+        sostituzioni: [{da: "sin(a*x)", a: "a*x"}]
+        parafrasi: 'So you want to replace $\sin {ax}$ with ${ax}$, so the numerator becomes zero, right?'
+    vietato: ["/6", "third order", "x^3/6", "9/2", "frac{"]
+
+  - id: lim-esponenziale
+    corso: analisi1
+    motore: limite
+    titolo: "Limit with exponential"
+    tipo: "Limits with Taylor"
+    livello: 2
+    concetti: [taylor-esponenziale]
+    parametri: {a: [1, 2, 3]}
+    demo: {a: 2}
+    espressione: "(exp(a*x) - 1 - a*x)/x**2"
+    latex: '\lim_{x \to 0} \frac{e^{{ax}} - 1 - {ax}}{x^2}'
+    testo: 'Compute $\displaystyle\lim_{x \to 0} \frac{e^{{ax}} - 1 - {ax}}{x^2}$'
+    piano_demo: "e^({ax}) is about 1 + {ax}, so the numerator is zero and the limit is 0"
+    slide: "Taylor expansions: exponential (link the course slide here)"
+    errori:
+      - id: esponenziale-primo-ordine
+        nome: "Exponential stopped at first order"
+        sostituzioni: [{da: "exp(a*x)", a: "1 + a*x"}]
+        domanda_mirata: 'When you write $e^{{ax}}$ as $1 + {ax}$, what is left out? How big is it compared to $x^2$?'
+        spunto: 'Try keeping one more term in the expansion of $e^{{ax}}$.'
+    regole_offline:
+      - almeno_una: ["x^2", "squared", "second"]
+        richiede_una: ["e^", "exp", "exponential"]
+        sostituzioni: [{da: "exp(a*x)", a: "1 + a*x + (a*x)**2/2"}]
+        parafrasi: 'So you want to replace $e^{{ax}}$ with $1 + {ax} + \frac{({ax})^2}{2}$, right?'
+      - almeno_una: ["1+", "oneplus"]
+        richiede_una: ["e^", "exp", "exponential"]
+        sostituzioni: [{da: "exp(a*x)", a: "1 + a*x"}]
+        parafrasi: 'So you want to replace $e^{{ax}}$ with $1 + {ax}$, right?'
+    vietato: ["/2", "second order", "x^2/2", "frac{"]
+
+  - id: lim-tangente
+    corso: analisi1
+    motore: limite
+    titolo: "Tangent minus sine"
+    tipo: "Limits with Taylor"
+    livello: 3
+    concetti: [taylor-tangente, taylor-seno]
+    parametri: {a: [1, 2]}
+    demo: {a: 1}
+    espressione: "(tan(a*x) - sin(a*x))/x**3"
+    latex: '\lim_{x \to 0} \frac{\tan({ax}) - \sin({ax})}{x^3}'
+    testo: 'Compute $\displaystyle\lim_{x \to 0} \frac{\tan {ax} - \sin {ax}}{x^3}$'
+    piano_demo: "tan {ax} and sin {ax} are both about {ax}, so the numerator is zero"
+    slide: "Taylor expansions: sine and tangent (link the course slide here)"
+    errori:
+      - id: tangente-seno-primo-ordine
+        nome: "Tangent and sine stopped at first order"
+        sostituzioni: [{da: "tan(a*x)", a: "a*x"}, {da: "sin(a*x)", a: "a*x"}]
+        domanda_mirata: 'If tangent and sine are both ${ax}$, the numerator is zero. But are they really equal up to $x^3$?'
+        spunto: 'Try expanding tangent and sine up to the $x^3$ term.'
+    regole_offline:
+      - tutte: ["tan", "sin"]
+        almeno_una: ["x^3", "cube", "cubed", "third"]
+        sostituzioni: [{da: "tan(a*x)", a: "a*x + (a*x)**3/3"}, {da: "sin(a*x)", a: "a*x - (a*x)**3/6"}]
+        parafrasi: 'So you want to expand tangent and sine up to the $x^3$ term, right?'
+      - tutte: ["tan", "sin"]
+        almeno_una: ["{ax}", "about", "≈", "~", "equal", "approx"]
+        sostituzioni: [{da: "tan(a*x)", a: "a*x"}, {da: "sin(a*x)", a: "a*x"}]
+        parafrasi: 'So you want to replace both $\tan {ax}$ and $\sin {ax}$ with ${ax}$, right?'
+    vietato: ["/3", "/6", "third order", "x^3/3", "frac{"]
+
+  # ---------------------------------------------------------------- Physics I
+  - id: fis-lancio
+    corso: fisica1
+    motore: valore
+    titolo: "Vertical throw"
+    tipo: "Kinematics"
+    livello: 1
+    concetti: [moto-verticale]
+    parametri: {v0: [15, 20, 25]}
+    demo: {v0: 20}
+    costanti: {g: 9.81}
+    testo: 'A ball is thrown straight up at $v_0 = {v0}\ \mathrm{m/s}$. After how many seconds does it land? ($g = 9.81\ \mathrm{m/s^2}$)'
+    piano_demo: "It lands after t = v0/g, when the velocity becomes zero"
+    variabile: t
+    vero: "2*v0/g"
+    osservabile: "v0*t - g*t**2/2"
+    obiettivo: "0"
+    unita: "s"
+    unita_osservabile: "m"
+    colonne: ["t (s)", "height (m)", ""]
+    nota_riga: "← your time"
+    etichetta_previsto: "you say it lands after"
+    etichetta_tendenza: "at that time the ball is at"
+    asse_x: "time (s)"
+    etichetta_curva: "height of the ball"
+    etichetta_obiettivo: "ground"
+    frase_contraddizione: 'If you were right, at $t = {previsto}$ the ball should be on the ground. Instead, look at the table: at that time it is still {tendenza} high.'
+    frase_ancora: 'at your time the ball is still {tendenza} high, not on the ground.'
+    frase_torna: 'at $t = {previsto}$ the height is {tendenza}: the ball is exactly on the ground.'
+    slide: "Uniformly accelerated motion: the equation of motion (link the course slide here)"
+    errori:
+      - id: tempo-di-salita
+        nome: "Time to the top mistaken for flight time"
+        valore: "v0/g"
+        domanda_mirata: 'At the moment the velocity becomes zero, where is the ball: on the ground or somewhere else?'
+        spunto: 'Try writing the height as a function of time, $h(t)$, and ask yourself when it is zero again.'
+    regole_offline:
+      - almeno_una: ["2v0", "2*v0", "2{v0}", "2*{v0}", "twice", "double"]
+        valore: "2*v0/g"
+        parafrasi: 'So you say it lands after $t = \frac{2 v_0}{g}$, about {valore}, right?'
+      - almeno_una: ["v0/g", "{v0}/g", "{v0}/9", "velocitybecomeszero", "velocityiszero", "velocityzero", "speediszero"]
+        valore: "v0/g"
+        parafrasi: 'So you say it lands after $t = \frac{v_0}{g}$, about {valore}, right?'
+    vietato: ["twice", "double", "2v_0", "round trip"]
+
+  - id: fis-caduta
+    corso: fisica1
+    motore: valore
+    titolo: "Free fall"
+    tipo: "Energy"
+    livello: 2
+    concetti: [caduta-libera]
+    parametri: {h: [20, 45, 80]}
+    demo: {h: 20}
+    costanti: {g: 9.81}
+    testo: 'A stone is dropped from rest from $h = {h}\ \mathrm{m}$. How fast is it going when it hits the ground? ($g = 9.81\ \mathrm{m/s^2}$)'
+    piano_demo: "I use v = square root of g times h, so about 14 m/s"
+    variabile: v
+    vero: "sqrt(2*g*h)"
+    osservabile: "v**2/(2*g)"
+    obiettivo: "h"
+    unita: "m/s"
+    unita_osservabile: "m"
+    colonne: ["speed (m/s)", "fall needed (m)", ""]
+    nota_riga: "← your speed"
+    etichetta_previsto: "you say it lands at"
+    etichetta_tendenza: "that speed only needs a fall of"
+    asse_x: "speed (m/s)"
+    etichetta_curva: "fall needed"
+    etichetta_obiettivo: "starting height"
+    frase_contraddizione: 'If you were right, to reach {previsto} the stone should fall from {h} m. Instead, with that speed the fall needed is only {tendenza}.'
+    frase_ancora: 'with your speed the fall needed is {tendenza}, not {h} m.'
+    frase_torna: 'with {previsto} the fall needed is exactly {tendenza}.'
+    slide: "Conservation of mechanical energy (link the course slide here)"
+    errori:
+      - id: radice-senza-due
+        nome: 'Factor 2 forgotten in $v = \sqrt{2gh}$'
+        valore: "sqrt(g*h)"
+        domanda_mirata: 'Is kinetic energy $m v^2$, or something else? What changes in your formula?'
+        spunto: 'Try setting the initial potential energy equal to the final kinetic energy, with every factor.'
+    regole_offline:
+      - almeno_una: ["2gh", "2*g*h", "2g*h", "2*9.81", "2timesg"]
+        valore: "sqrt(2*g*h)"
+        parafrasi: 'So you say $v = \sqrt{2 g h}$, about {valore}, right?'
+      - almeno_una: ["squarerootofg", "sqrt(gh)", "sqrt(g*h)", "√(gh)", "√gh", "√(g*h)", "gtimesh", "sqrt{gh}"]
+        valore: "sqrt(g*h)"
+        parafrasi: 'So you say $v = \sqrt{g h}$, about {valore}, right?'
+    vietato: ["1/2", "factor 2", "2gh", "one half", "frac{1}{2}"]
+
+  # ---------------------------------------------------------------- Computer Science
+  - id: inf-range
+    corso: informatica
+    motore: traccia
+    simulatore: somma_range
+    titolo: "Sum with range"
+    tipo: "For loops"
+    livello: 1
+    concetti: [cicli-range]
+    parametri: {n: [6, 10, 11]}
+    demo: {n: 10}
+    testo: "What is the value of s at the end?"
+    codice: "s = 0\nfor i in range(1, {n}):\n    s = s + i\nprint(s)"
+    piano_demo: "i goes from 1 to {n}, so s = {n}·({n}+1)/2"
+    vero: "n*(n-1)/2"
+    colonne: ["step", "i", "s"]
+    etichetta_previsto: "you say at the end s is"
+    etichetta_tendenza: "the program actually prints"
+    asse_x: "step"
+    etichetta_curva: "value of s"
+    frase_contraddizione: 'If you were right, at the end we should read $s = {previsto}$. Instead, running the program step by step gives {tendenza}.'
+    frase_ancora: 'your value is {previsto}, but the program prints {tendenza}.'
+    frase_torna: 'the program prints exactly {tendenza}.'
+    slide: "The for loop and the range function (link the course slide here)"
+    errori:
+      - id: range-incluso
+        nome: "range(1, n) believed to include n"
+        valore: "n*(n+1)/2"
+        domanda_mirata: 'In the table, what is the last value that $i$ takes? Is it the one you expected?'
+        spunto: 'Reread what the second argument of range does: is it ever reached?'
+    regole_offline:
+      - almeno_una: ["excluded", "exclusive", "n-1", "n(n-1)", "{n}-1", "notincluded", "stopsbefore"]
+        valore: "n*(n-1)/2"
+        parafrasi: 'So you say $i$ stops before {n} and at the end $s = {valore}$, right?'
+      - almeno_una: ["n(n+1)", "({n}+1)", "{n}+1", "to{n}", "upto{n}", "1to{n}", "included", "inclusive"]
+        valore: "n*(n+1)/2"
+        parafrasi: 'So you say $i$ goes from 1 to {n} included and at the end $s = {valore}$, right?'
+    vietato: ["excluded", "exclusive", "n-1", "never reached", "not included"]
+
+  - id: inf-while
+    corso: informatica
+    motore: traccia
+    simulatore: conta_while
+    titolo: "How many iterations?"
+    tipo: "While loops"
+    livello: 2
+    concetti: [cicli-while]
+    parametri: {n: [7, 9, 11]}
+    demo: {n: 7}
+    testo: "How many times does the loop body run, i.e. what does it print?"
+    codice: "i = 0\ncount = 0\nwhile i < {n}:\n    count = count + 1\n    i = i + 2\nprint(count)"
+    piano_demo: "Each time i grows by 2, so the loop runs {n}/2 times, taking the integer part"
+    vero: "ceiling(n/2)"
+    colonne: ["step", "i before the check", "count"]
+    etichetta_previsto: "you say it prints"
+    etichetta_tendenza: "the program actually prints"
+    asse_x: "step"
+    etichetta_curva: "value of count"
+    frase_contraddizione: 'If you were right, we should read {previsto}. Instead, running the program gives {tendenza}.'
+    frase_ancora: 'your value is {previsto}, but the program prints {tendenza}.'
+    frase_torna: 'the program prints exactly {tendenza}.'
+    slide: "The while loop and its exit condition (link the course slide here)"
+    errori:
+      - id: divisione-intera
+        nome: "Integer part instead of rounding up"
+        valore: "floor(n/2)"
+        domanda_mirata: 'Look at the $i$ column in the table: what is the last value for which $i < {n}$ is still true?'
+        spunto: 'Count how many times the condition is true, starting from $i = 0$.'
+    regole_offline:
+      - almeno_una: ["roundup", "roundedup", "ceil", "+1"]
+        valore: "ceiling(n/2)"
+        parafrasi: 'So you say the loop runs $\lceil {n}/2 \rceil$ times, that is {valore}, right?'
+      - almeno_una: ["n/2", "{n}/2", "n//2", "{n}//2", "half", "integerpart"]
+        valore: "floor(n/2)"
+        parafrasi: 'So you say the loop runs ${n}/2$ times, taking the integer part: {valore}, right?'
+    vietato: ["round up", "ceil", "rounded up", "still true"]
