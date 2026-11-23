@@ -1,124 +1,148 @@
-"""Server di PoliBuddy: API per studente e docente + pagina web.
+"""PoliBuddy server: student and teacher APIs plus the web page.
 
-Avvio:  .venv\\Scripts\\python -m uvicorn server:app --port 8000
+Run locally:  python -m uvicorn server:app --port 8000
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from buddy import llm, orchestrator, voce
-from buddy.catalogo import corsi
-from buddy.config import MODELLO
-from docente import crash_test, radar
+from buddy import config, llm, orchestrator, ratelimit, voice
+from buddy.catalog import courses
+from teacher import crash_test, radar
 
 WEB = Path(__file__).parent / "web"
 
 app = FastAPI(title="PoliBuddy")
 
 
-class RichiestaSessione(BaseModel):
-    studente: str = "demo"
-    esercizio: str | None = None
-    corso: str | None = None
+class SessionRequest(BaseModel):
+    student: str = "demo"
+    exercise: str | None = None
+    course: str | None = None
 
 
-class Allegato(BaseModel):
-    nome: str
-    tipo: str = ""
-    dati: str  # data URL base64
+class Attachment(BaseModel):
+    name: str
+    type: str = ""
+    data: str  # base64 data URL
 
 
-class RichiestaMessaggio(BaseModel):
-    sessione: str
-    testo: str = ""
-    lavagna: str | None = None  # PNG come data URL
-    allegati: list[Allegato] = []
+class MessageRequest(BaseModel):
+    session: str
+    text: str = ""
+    whiteboard: str | None = None  # PNG as a data URL
+    files: list[Attachment] = Field(default_factory=list)
 
 
-class RichiestaProssimo(BaseModel):
-    sessione: str
+class NextRequest(BaseModel):
+    session: str
 
 
-class RichiestaCrashTest(BaseModel):
-    domande: list[str]
+class CrashTestRequest(BaseModel):
+    questions: list[str]
 
 
-class RichiestaTrascrivi(BaseModel):
-    audio: str  # data URL base64 recorded by the browser
-    tipo: str = "audio/webm"
+class TranscribeRequest(BaseModel):
+    audio: str  # base64 data URL recorded by the browser
+    type: str = "audio/webm"
 
 
-class RichiestaParla(BaseModel):
-    testo: str
+class SpeakRequest(BaseModel):
+    text: str
 
 
-def _sessione_esiste(sid: str) -> None:
-    if sid not in orchestrator.SESSIONI:
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "?")
+
+
+def _limit(request: Request) -> None:
+    if not ratelimit.allow(_client_ip(request)):
+        raise HTTPException(429, "Too many requests: wait a minute and try again.")
+
+
+def _check_session(sid: str) -> None:
+    if sid not in orchestrator.SESSIONS:
         raise HTTPException(404, "Session not found: reload the page.")
 
 
-@app.get("/api/stato")
-def stato() -> dict:
+@app.get("/api/status")
+def status() -> dict:
+    using_model = llm.available()
     return {
-        "modalita": "modello" if llm.disponibile() else "offline",
-        "modello": MODELLO if llm.disponibile() else None,
-        "ultimo_errore": llm.ultimo_errore,
-        "corsi": [{"id": k, "nome": v["nome"]} for k, v in corsi().items()],
+        "mode": "model" if using_model else "offline",
+        "model": config.LLM_MODEL if using_model else None,
+        "budget_left": llm.budget_left() if config.llm_configured() else None,
+        "vision": llm.vision_available(),
+        "stt": voice.stt_available(),
+        "tts": voice.tts_available(),
+        "last_error": llm.last_error,
+        "courses": [{"id": k, "name": v["name"]} for k, v in courses().items()],
     }
 
 
-@app.post("/api/sessione")
-def sessione(req: RichiestaSessione) -> dict:
-    return orchestrator.nuova_sessione(req.studente, req.esercizio, req.corso)
+@app.post("/api/session")
+def session(req: SessionRequest) -> dict:
+    return orchestrator.new_session(req.student, req.exercise, req.course)
 
 
-@app.post("/api/messaggio")
-def messaggio(req: RichiestaMessaggio) -> dict:
-    _sessione_esiste(req.sessione)
-    return orchestrator.messaggio(req.sessione, req.testo, req.lavagna, [a.model_dump() for a in req.allegati])
+@app.post("/api/message")
+def message(req: MessageRequest, request: Request) -> dict:
+    _check_session(req.session)
+    _limit(request)
+    return orchestrator.message(req.session, req.text, req.whiteboard, [f.model_dump() for f in req.files])
 
 
-@app.post("/api/prossimo")
-def prossimo(req: RichiestaProssimo) -> dict:
-    _sessione_esiste(req.sessione)
-    return orchestrator.prossimo(req.sessione)
+@app.post("/api/next")
+def next_exercise(req: NextRequest) -> dict:
+    _check_session(req.session)
+    return orchestrator.next_exercise(req.session)
 
 
 @app.get("/api/radar")
-def get_radar(corso: str = "analisi1") -> dict:
-    return radar.aggrega(corso)
+def get_radar(course: str = "calculus1") -> dict:
+    return radar.aggregate(course)
 
 
 @app.get("/api/crash-test/demo")
-def crash_test_demo(corso: str = "analisi1") -> dict:
-    return {"domande": crash_test.DOMANDE_DEMO.get(corso, [])}
+def crash_test_demo(course: str = "calculus1") -> dict:
+    return {"questions": crash_test.DEMO_QUESTIONS.get(course, [])}
 
 
 @app.post("/api/crash-test")
-def post_crash_test(req: RichiestaCrashTest) -> dict:
-    return {"report": crash_test.analizza(req.domande)}
+def post_crash_test(req: CrashTestRequest) -> dict:
+    return {"report": crash_test.analyze(req.questions)}
 
 
-@app.post("/api/voce/trascrivi")
-def voce_trascrivi(req: RichiestaTrascrivi) -> dict:
-    testo = voce.trascrivi(req.audio, req.tipo)
-    if testo is None:
-        raise HTTPException(503, "Voice transcription is not available (no model or audio not understood).")
-    return {"testo": testo}
+@app.post("/api/voice/transcribe")
+def voice_transcribe(req: TranscribeRequest, request: Request) -> dict:
+    _limit(request)
+    text = voice.transcribe(req.audio, req.type)
+    if text is None:
+        raise HTTPException(503, "Server transcription is not available.")
+    return {"text": text}
 
 
-@app.post("/api/voce/parla")
-def voce_parla(req: RichiestaParla) -> Response:
-    audio = voce.parla(req.testo)
+@app.post("/api/voice/speak")
+def voice_speak(req: SpeakRequest, request: Request) -> Response:
+    if not voice.tts_available():
+        raise HTTPException(503, "Server voice is not available: the browser speaks instead.")
+    _limit(request)
+    audio = voice.speak(req.text)
     if audio is None:
-        raise HTTPException(503, "Voice synthesis is not available.")
+        raise HTTPException(503, "Server voice is not available: the browser speaks instead.")
     return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.get("/healthz")
+def healthz() -> dict:
+    return {"ok": True}
 
 
 @app.get("/")

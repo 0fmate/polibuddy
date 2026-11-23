@@ -1,31 +1,35 @@
 /* PoliBuddy · demo interface (no frameworks; KaTeX renders every formula). */
 
 const $ = (sel) => document.querySelector(sel);
-const stato = {
-  sessione: null, fase: "attesa_piano", lavagnaSporca: false, modalita: "offline",
-  esercizio: null, allegati: [], corsoDocente: "analisi1", ultimaEsecuzione: null,
+const state = {
+  session: null, phase: "awaiting_plan", boardDirty: false, status: { mode: "offline" },
+  exercise: null, files: [], teacherCourse: "calculus1",
 };
 
-const UMORE = {
+const MOODS = {
   default: "Ready to try your idea",
-  studio: "Studying your plan…",
-  riflessione: "Hmm… something doesn't add up",
-  riprova: "Try again, you're close",
+  studying: "Studying your plan…",
+  thinking: "Hmm… something doesn't add up",
+  retry: "Try again, you're close",
   idea: "I've got a hint for you",
-  successo: "You did it!",
+  success: "You did it!",
 };
-const STATO_ARGOMENTO = {
-  da_fare: { img: "default", testo: "to do" },
-  in_corso: { img: "riprova", testo: "in progress" },
-  con_aiuto: { img: "idea", testo: "solved with help" },
-  da_solo: { img: "successo", testo: "solved on your own" },
+const TOPIC_STATUS = {
+  todo: { img: "default", text: "to do" },
+  in_progress: { img: "retry", text: "in progress" },
+  with_help: { img: "idea", text: "solved with help" },
+  alone: { img: "success", text: "solved on your own" },
 };
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  if (!r.ok) {
+    const err = new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    err.status = r.status;
+    throw err;
+  }
   return r.json();
 }
 
@@ -45,159 +49,159 @@ function renderMath(el) {
 }
 
 // Turns plain maths typed by the student (x^2, sin 3x, v0/g, ≈) into LaTeX, so nothing shows unformatted.
-const FUNZ = /^(sin|cos|tan|sqrt|exp|ln|lim)(\(|$)/i;
-function tokenForte(w) {
+const FUNCTIONS = /^(sin|cos|tan|sqrt|exp|ln|lim)(\(|$)/i;
+function strongToken(w) {
   if (/^(m\/s\^?2?|km\/h|m\/s²)$/i.test(w)) return false; // units stay text
-  return /[\^\/=≈*·]/.test(w) || FUNZ.test(w) || /^\d+[xtvghn]$/.test(w) || /^[a-z]0$/.test(w) || /^[=≈+\-−*·\/^]+$/.test(w);
+  return /[\^\/=≈*·]/.test(w) || FUNCTIONS.test(w) || /^\d+[xtvghn]$/.test(w) || /^[a-z]0$/.test(w) || /^[=≈+\-−*·\/^]+$/.test(w);
 }
-function tokenDebole(w) {
+function weakToken(w) {
   return /^\(?-?\d+(\.\d+)?\)?$/.test(w) || /^[xtvghns]$/.test(w) || /^[()+\-−]$/.test(w) || /^\(?\d*[xtvghn]\)?$/.test(w);
 }
-function inLatex(span) {
+function toLatex(span) {
   let s = span.replace(/≈/g, " \\approx ").replace(/[·*]/g, " \\cdot ").replace(/−/g, "-");
   s = s.replace(/\bsqrt\s*\(([^()]*)\)/gi, "\\sqrt{$1}");
   s = s.replace(/\b(sin|cos|tan|ln|exp)\b\s*/gi, (m, f) => `\\${f.toLowerCase()} `);
   // fractions first, so that (3x)^3/6 becomes \frac{(3x)^3}{6}
-  const togli = (t) => (/^\([^()]*\)$/.test(t) ? t.slice(1, -1) : t);
+  const unwrap = (t) => (/^\([^()]*\)$/.test(t) ? t.slice(1, -1) : t);
   s = s.replace(/((?:\([^()]*\)|[A-Za-z0-9_.]+)(?:\^(?:\([^()]*\)|-?[0-9a-z]+))?)\s*\/\s*((?:\([^()]*\)|[A-Za-z0-9_.]+)(?:\^(?:\([^()]*\)|-?[0-9a-z]+))?)/g,
-    (m, a, b) => `\\frac{${togli(a)}}{${togli(b)}}`);
+    (m, a, b) => `\\frac{${unwrap(a)}}{${unwrap(b)}}`);
   s = s.replace(/\b([a-z])0\b/g, "$1_0");
   s = s.replace(/\^\(([^()]*)\)/g, "^{$1}").replace(/\^(-?[0-9a-z]+)/g, "^{$1}");
   return s;
 }
-function mathify(testo) {
-  if (testo.includes("$")) return testo;
-  testo = testo.replace(/²/g, "^2").replace(/³/g, "^3");
-  const parole = testo.split(/(\s+)/);
-  const pulisci = (w) => w.replace(/[,.;:?!]+$/, "");
-  const forte = parole.map((w) => w.trim() && tokenForte(pulisci(w)));
-  const debole = parole.map((w) => w.trim() && tokenDebole(pulisci(w)));
-  const dentro = forte.slice();
-  for (let giro = 0; giro < 2; giro++) {
-    for (let i = 0; i < parole.length; i++) {
-      if (!parole[i].trim() || dentro[i] || !debole[i]) continue;
-      const vicino = (j) => j >= 0 && j < parole.length && dentro[j];
-      let k = i - 1; while (k >= 0 && !parole[k].trim()) k--;
-      let h = i + 1; while (h < parole.length && !parole[h].trim()) h++;
-      const finePrima = k >= 0 && /[,.;:?!]$/.test(parole[k]);
-      if ((vicino(k) && !finePrima) || (vicino(h) && !/[,.;:?!]$/.test(parole[i]))) dentro[i] = true;
+function mathify(text) {
+  if (text.includes("$")) return text;
+  text = text.replace(/²/g, "^2").replace(/³/g, "^3");
+  const words = text.split(/(\s+)/);
+  const clean = (w) => w.replace(/[,.;:?!]+$/, "");
+  const strong = words.map((w) => w.trim() && strongToken(clean(w)));
+  const weak = words.map((w) => w.trim() && weakToken(clean(w)));
+  const inside = strong.slice();
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < words.length; i++) {
+      if (!words[i].trim() || inside[i] || !weak[i]) continue;
+      const near = (j) => j >= 0 && j < words.length && inside[j];
+      let k = i - 1; while (k >= 0 && !words[k].trim()) k--;
+      let h = i + 1; while (h < words.length && !words[h].trim()) h++;
+      const endBefore = k >= 0 && /[,.;:?!]$/.test(words[k]);
+      if ((near(k) && !endBefore) || (near(h) && !/[,.;:?!]$/.test(words[i]))) inside[i] = true;
     }
   }
   let out = "", buf = [];
-  const svuota = () => {
+  const flush = () => {
     if (!buf.length) return;
     let span = buf.join("").trim();
-    const coda = (span.match(/[,.;:?!]+$/) || [""])[0];
-    span = span.slice(0, span.length - coda.length);
+    const tail = (span.match(/[,.;:?!]+$/) || [""])[0];
+    span = span.slice(0, span.length - tail.length);
     // a formula cut in half ("v =") or a lone number stays plain text
-    out += /^[a-z]?\s*[=≈]$|^-?\d+(\.\d+)?$/.test(span.trim()) ? span + coda : `$${inLatex(span)}$${coda}`;
+    out += /^[a-z]?\s*[=≈]$|^-?\d+(\.\d+)?$/.test(span.trim()) ? span + tail : `$${toLatex(span)}$${tail}`;
     buf = [];
   };
-  for (let i = 0; i < parole.length; i++) {
-    if (dentro[i]) {
-      buf.push(parole[i]);
-      if (/[,.;:?!]$/.test(parole[i])) svuota();
-    } else if (!parole[i].trim() && buf.length) {
-      let h = i + 1; while (h < parole.length && !parole[h].trim()) h++;
-      if (h < parole.length && dentro[h]) buf.push(parole[i]); else { svuota(); out += parole[i]; }
-    } else { svuota(); out += parole[i]; }
+  for (let i = 0; i < words.length; i++) {
+    if (inside[i]) {
+      buf.push(words[i]);
+      if (/[,.;:?!]$/.test(words[i])) flush();
+    } else if (!words[i].trim() && buf.length) {
+      let h = i + 1; while (h < words.length && !words[h].trim()) h++;
+      if (h < words.length && inside[h]) buf.push(words[i]); else { flush(); out += words[i]; }
+    } else { flush(); out += words[i]; }
   }
-  svuota();
+  flush();
   return out;
 }
 
 /* ---------------- Views ---------------- */
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
-  const vista = t.dataset.view;
-  $("#view-studente").hidden = vista !== "studente";
-  $("#view-docente").hidden = vista !== "docente";
-  if (vista === "docente") caricaDocente($("#corso").value);
-  else preparaLavagna();
+  const view = t.dataset.view;
+  $("#view-student").hidden = view !== "student";
+  $("#view-teacher").hidden = view !== "teacher";
+  if (view === "teacher") loadTeacher($("#course").value);
+  else prepareBoard();
 }));
 
 /* ---------------- Student: exercise, mascot, progress ---------------- */
-function renderEsercizio(es) {
-  stato.esercizio = es;
-  $("#es-corso").textContent = es.corso_nome;
-  $("#es-tipo").textContent = es.tipo;
-  $("#es-livello").textContent = `Level ${es.livello}`;
-  const box = $("#es-formula");
-  box.classList.toggle("testo", !es.latex);
-  if (es.latex && window.katex) {
-    try { window.katex.render(es.latex, box, { displayMode: true, throwOnError: false }); }
-    catch (_) { box.textContent = es.testo; }
+function renderExercise(ex) {
+  state.exercise = ex;
+  $("#ex-course").textContent = ex.course_name;
+  $("#ex-topic").textContent = ex.topic;
+  $("#ex-level").textContent = `Level ${ex.level}`;
+  const box = $("#ex-formula");
+  box.classList.toggle("text-mode", !ex.latex);
+  if (ex.latex && window.katex) {
+    try { window.katex.render(ex.latex, box, { displayMode: true, throwOnError: false }); }
+    catch (_) { box.textContent = ex.text; }
   } else {
-    box.textContent = es.testo;
+    box.textContent = ex.text;
     renderMath(box);
   }
-  $("#es-codice").hidden = !es.codice;
-  $("#es-codice").textContent = es.codice || "";
-  $("#corso").value = es.corso;
-  $("#prog-corso").textContent = es.corso_nome;
+  $("#ex-code").hidden = !ex.code;
+  $("#ex-code").textContent = ex.code || "";
+  $("#course").value = ex.course;
+  $("#progress-course").textContent = ex.course_name;
 }
 
-function renderMascotte(umore) {
-  const img = $("#mascotte");
-  const src = `/brand/mascotte/${umore}.svg`;
+function renderMascot(mood) {
+  const img = $("#mascot");
+  const src = `/brand/mascot/${mood}.svg`;
   if (!img.src.endsWith(src)) {
     img.src = src;
-    img.classList.remove("cambia");
+    img.classList.remove("swap");
     void img.offsetWidth;
-    img.classList.add("cambia");
+    img.classList.add("swap");
   }
-  $("#umore").textContent = UMORE[umore] || "";
-  $("#voce-mascotte").src = src;
+  $("#mood").textContent = MOODS[mood] || "";
+  $("#voice-mascot").src = src;
 }
 
-function renderProgressi(lista) {
-  const box = $("#progressi");
+function renderProgress(list) {
+  const box = $("#progress");
   box.innerHTML = "";
-  lista.forEach((p) => {
-    const info = STATO_ARGOMENTO[p.stato];
+  list.forEach((p) => {
+    const info = TOPIC_STATUS[p.status];
     const b = document.createElement("button");
     b.type = "button";
-    b.className = `prog ${p.stato}${stato.esercizio && stato.esercizio.id === p.id ? " corrente" : ""}`;
-    b.innerHTML = `<img alt=""><div><div class="prog-nome"></div><div class="prog-stato"></div></div>`;
-    b.querySelector("img").src = `/brand/mascotte/${info.img}.svg`;
-    b.querySelector(".prog-nome").textContent = p.titolo;
-    b.querySelector(".prog-stato").textContent = `L${p.livello} · ${info.testo}`;
-    b.title = `${p.titolo}: ${info.testo}`;
-    b.addEventListener("click", () => avviaSessione(p.id));
+    b.className = `prog ${p.status}${state.exercise && state.exercise.id === p.id ? " current" : ""}`;
+    b.innerHTML = `<img alt=""><div><div class="prog-name"></div><div class="prog-status"></div></div>`;
+    b.querySelector("img").src = `/brand/mascot/${info.img}.svg`;
+    b.querySelector(".prog-name").textContent = p.title;
+    b.querySelector(".prog-status").textContent = `L${p.level} · ${info.text}`;
+    b.title = `${p.title}: ${info.text}`;
+    b.addEventListener("click", () => startSession(p.id));
     box.appendChild(b);
   });
 }
 
-function aggiungiMsg(testo, ruolo, file = [], opzioni = {}) {
+function addMessage(text, role, files = [], options = {}) {
   const div = document.createElement("div");
-  div.className = `msg ${ruolo}`;
-  if (opzioni.voce) {
+  div.className = `msg ${role}`;
+  if (options.voice) {
     const tag = document.createElement("span");
-    tag.className = "voce-tag";
+    tag.className = "voice-tag";
     tag.textContent = "🎙 voice";
     div.appendChild(tag);
   }
-  const corpo = document.createElement("span");
-  corpo.textContent = ruolo.startsWith("studente") ? mathify(testo) : testo;
-  div.appendChild(corpo);
-  if (file.length) {
+  const body = document.createElement("span");
+  body.textContent = role.startsWith("student") ? mathify(text) : text;
+  div.appendChild(body);
+  if (files.length) {
     const chips = document.createElement("div");
     chips.className = "file-chips";
-    file.forEach((f) => chips.appendChild(chipFile(f, false)));
+    files.forEach((f) => chips.appendChild(fileChip(f, false)));
     div.appendChild(chips);
   }
   $("#messages").appendChild(div);
-  if (!ruolo.includes("pensa")) renderMath(corpo);
+  if (!role.includes("pending")) renderMath(body);
   $("#messages").scrollTop = $("#messages").scrollHeight;
   return div;
 }
 
-function renderCorda(livello, max) {
-  const box = $("#corda");
+function renderRope(level, max) {
+  const box = $("#rope");
   box.innerHTML = "";
   for (let i = 1; i <= max; i++) {
     const d = document.createElement("i");
-    if (i <= livello) d.className = "on";
+    if (i <= level) d.className = "on";
     box.appendChild(d);
   }
 }
@@ -205,369 +209,379 @@ function renderCorda(livello, max) {
 function renderQuick() {
   const box = $("#quick");
   box.innerHTML = "";
-  let scelte = [];
-  if (stato.fase === "attesa_conferma") scelte = ["Yes, exactly", "No, wait"];
-  else if (stato.fase === "attesa_piano") {
-    if (stato.esercizio?.piano_demo) scelte.push(stato.esercizio.piano_demo);
-    scelte.push("Just tell me the solution");
+  let choices = [];
+  if (state.phase === "awaiting_confirmation") choices = ["Yes, exactly", "No, wait"];
+  else if (state.phase === "awaiting_plan") {
+    if (state.exercise?.demo_plan) choices.push(state.exercise.demo_plan);
+    choices.push("Just tell me the solution");
   }
-  scelte.forEach((s) => {
+  choices.forEach((c) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = mathify(s);
-    b.addEventListener("click", () => invia(s));
+    b.textContent = mathify(c);
+    b.addEventListener("click", () => send(c));
     box.appendChild(b);
     renderMath(b);
   });
 }
 
-function resetRisultati() {
-  stato.ultimaEsecuzione = null;
-  $("#risultati-vuoti").hidden = false;
-  $("#risultati-body").hidden = true;
-  $("#verdetto").hidden = true;
-  $("#prossimo").hidden = true;
+function resetResults() {
+  $("#results-empty").hidden = false;
+  $("#results-body").hidden = true;
+  $("#verdict").hidden = true;
+  $("#next").hidden = true;
 }
 
-function applicaRisposta(r) {
-  stato.sessione = r.sessione;
-  stato.fase = r.stato;
-  if (r.lavagna_letta) aggiungiMsg(`I read on the whiteboard: ${r.lavagna_letta}`, "letto");
-  (r.allegati_letti || []).forEach((a) => {
-    const div = aggiungiMsg(a.ok ? `I read ${a.nome}: ${a.sintesi}` : `${a.nome}: ${a.nota}`, "letto");
-    if (!a.ok) div.classList.add("ko");
+function applyReply(r) {
+  state.session = r.session;
+  state.phase = r.state;
+  if (r.whiteboard_text) addMessage(`I read on the whiteboard: ${r.whiteboard_text}`, "read");
+  (r.attachments || []).forEach((a) => {
+    const div = addMessage(a.ok ? `I read ${a.name}: ${a.summary}` : `${a.name}: ${a.note}`, "read");
+    if (!a.ok) div.classList.add("failed");
   });
-  r.messaggi.forEach((m) => aggiungiMsg(m, "buddy"));
-  renderMascotte(r.umore);
-  renderCorda(r.livello_aiuto, r.livello_aiuto_max);
-  renderProgressi(r.progressi || []);
+  r.messages.forEach((m) => addMessage(m, "buddy"));
+  renderMascot(r.mood);
+  renderRope(r.help_level, r.max_help_level);
+  renderProgress(r.progress || []);
   renderQuick();
-  if (r.esecuzione) mostraRisultati(r.esecuzione);
-  $("#prossimo").hidden = r.stato !== "risolto";
+  if (r.run) showResults(r.run);
+  $("#next").hidden = r.state !== "solved";
 }
 
-async function avviaSessione(esercizio, corso) {
-  const r = await api("/api/sessione", { studente: $("#studente").value || "demo", esercizio, corso });
+async function startSession(exercise, course) {
+  const r = await api("/api/session", { student: $("#student").value || "demo", exercise, course });
   $("#messages").innerHTML = "";
-  resetRisultati();
-  renderEsercizio(r.esercizio);
-  applicaRisposta(r);
+  resetResults();
+  renderExercise(r.exercise);
+  applyReply(r);
 }
 
 /* ---------------- Attachments (photos and documents) ---------------- */
 const MAX_FILE = 8 * 1024 * 1024;
 
-function chipFile(f, rimovibile) {
+function fileChip(f, removable) {
   const c = document.createElement("span");
   c.className = "file-chip";
-  if (f.tipo.startsWith("image/")) {
+  if (f.type.startsWith("image/")) {
     const img = document.createElement("img");
-    img.src = f.dati;
+    img.src = f.data;
     img.alt = "";
     c.appendChild(img);
   } else {
-    c.append(f.nome.toLowerCase().endsWith(".pdf") ? "📄" : "📎");
+    c.append(f.name.toLowerCase().endsWith(".pdf") ? "📄" : "📎");
   }
   const s = document.createElement("span");
-  s.textContent = f.nome;
+  s.textContent = f.name;
   c.appendChild(s);
-  if (rimovibile) {
+  if (removable) {
     const x = document.createElement("button");
     x.type = "button";
     x.textContent = "×";
     x.title = "Remove";
     x.addEventListener("click", () => {
-      stato.allegati = stato.allegati.filter((a) => a !== f);
-      renderAnteprima();
+      state.files = state.files.filter((a) => a !== f);
+      renderPreview();
     });
     c.appendChild(x);
   }
   return c;
 }
 
-function renderAnteprima() {
-  const box = $("#anteprima");
+function renderPreview() {
+  const box = $("#preview");
   box.innerHTML = "";
-  stato.allegati.forEach((f) => box.appendChild(chipFile(f, true)));
-  box.hidden = stato.allegati.length === 0;
+  state.files.forEach((f) => box.appendChild(fileChip(f, true)));
+  box.hidden = state.files.length === 0;
 }
+
+const readAsDataURL = (blob) => new Promise((ok) => {
+  const fr = new FileReader();
+  fr.onload = () => ok(fr.result);
+  fr.readAsDataURL(blob);
+});
 
 $("#clip").addEventListener("click", () => $("#file").click());
 $("#file").addEventListener("change", async (e) => {
   for (const file of [...e.target.files].slice(0, 5)) {
-    if (file.size > MAX_FILE) { aggiungiMsg(`${file.name} is too large (8 MB max).`, "letto ko"); continue; }
-    const dati = await new Promise((ok) => {
-      const fr = new FileReader();
-      fr.onload = () => ok(fr.result);
-      fr.readAsDataURL(file);
-    });
-    stato.allegati.push({ nome: file.name, tipo: file.type || "", dati });
+    if (file.size > MAX_FILE) { addMessage(`${file.name} is too large (8 MB max).`, "read failed"); continue; }
+    state.files.push({ name: file.name, type: file.type || "", data: await readAsDataURL(file) });
   }
   e.target.value = "";
-  renderAnteprima();
+  renderPreview();
 });
 
 /* ---------------- Sending ---------------- */
-async function invia(testo, opzioni = {}) {
-  testo = (testo ?? $("#input").value).trim();
+async function send(text, options = {}) {
+  text = (text ?? $("#input").value).trim();
   // the whiteboard explains the plan; it is not needed to confirm it
-  const allegaLavagna = $("#allega").checked && stato.lavagnaSporca && stato.fase !== "attesa_conferma";
-  const file = opzioni.voce ? [] : stato.allegati;
-  if (!testo && !allegaLavagna && !file.length) return null;
-  aggiungiMsg(testo || (file.length ? "(sending you these files)" : "(sending you the whiteboard)"), "studente", file, opzioni);
-  if (!opzioni.voce) {
+  const attachBoard = $("#attach-board").checked && state.boardDirty && state.phase !== "awaiting_confirmation";
+  const files = options.voice ? [] : state.files;
+  if (!text && !attachBoard && !files.length) return null;
+  addMessage(text || (files.length ? "(sending you these files)" : "(sending you the whiteboard)"), "student", files, options);
+  if (!options.voice) {
     $("#input").value = "";
-    stato.allegati = [];
-    renderAnteprima();
+    state.files = [];
+    renderPreview();
   }
-  const legge = (allegaLavagna || file.length) && stato.modalita === "modello";
-  const attesa = aggiungiMsg(legge ? "PoliBuddy is reading…" : "PoliBuddy is thinking…", "buddy pensa");
-  renderMascotte("studio");
-  $("#invia").disabled = true;
+  const reading = (attachBoard || files.length) && state.status.vision;
+  const wait = addMessage(reading ? "PoliBuddy is reading…" : "PoliBuddy is thinking…", "buddy pending");
+  renderMascot("studying");
+  $("#send").disabled = true;
   try {
-    const r = await api("/api/messaggio", {
-      sessione: stato.sessione, testo,
-      lavagna: allegaLavagna ? $("#lavagna").toDataURL("image/png") : null,
-      allegati: file,
+    const r = await api("/api/message", {
+      session: state.session, text,
+      whiteboard: attachBoard ? $("#whiteboard").toDataURL("image/png") : null,
+      files,
     });
-    attesa.remove();
-    applicaRisposta(r);
+    wait.remove();
+    applyReply(r);
     return r;
   } catch (e) {
-    attesa.remove();
-    aggiungiMsg(`Connection problem: ${e.message}`, "buddy");
+    wait.remove();
+    if (e.status === 429) addMessage("Lots of people are trying the demo right now: wait a minute and send it again.", "buddy");
+    else if (e.status === 404) addMessage("This session expired (the demo server restarted). Reload the page to start again.", "buddy");
+    else addMessage(`Connection problem: ${e.message}`, "buddy");
+    renderMascot("default");
     return null;
   } finally {
-    $("#invia").disabled = false;
-    if (!opzioni.voce) $("#input").focus();
+    $("#send").disabled = false;
+    if (!options.voice) $("#input").focus();
   }
 }
 
-$("#composer").addEventListener("submit", (e) => { e.preventDefault(); invia(); });
+$("#composer").addEventListener("submit", (e) => { e.preventDefault(); send(); });
 $("#input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); invia(); }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
-$("#prossimo").addEventListener("click", async () => {
-  const r = await api("/api/prossimo", { sessione: stato.sessione });
+$("#next").addEventListener("click", async () => {
+  const r = await api("/api/next", { session: state.session });
   $("#messages").innerHTML = "";
-  resetRisultati();
-  renderEsercizio(r.esercizio);
-  applicaRisposta(r);
+  resetResults();
+  renderExercise(r.exercise);
+  applyReply(r);
 });
-$("#studente").addEventListener("change", () => avviaSessione(null, $("#corso").value));
-$("#corso").addEventListener("change", (e) => {
-  if (!$("#view-docente").hidden) caricaDocente(e.target.value);
-  avviaSessione(null, e.target.value);
+$("#student").addEventListener("change", () => startSession(null, $("#course").value));
+$("#course").addEventListener("change", (e) => {
+  if (!$("#view-teacher").hidden) loadTeacher(e.target.value);
+  startSession(null, e.target.value);
 });
 
 /* ---------------- Voice conversation ---------------- */
-const voce = {
-  attiva: false, stream: null, recorder: null, ctx: null, analyser: null, pezzi: [],
-  turni: [], inizio: 0, timer: null, riconoscitore: null, audio: null,
+// Speech-to-text: the server (e.g. Whisper on Groq) when available, otherwise the browser's recognition.
+// Text-to-speech: the server when a TTS model is configured, otherwise the browser's speechSynthesis.
+const voice = {
+  active: false, stream: null, recorder: null, ctx: null, analyser: null, chunks: [],
+  turns: [], start: 0, timer: null, recognizer: null, audio: null, serverStt: false,
 };
 
-function voceStato(testo, parla = false) {
-  $("#voce-stato").textContent = testo;
-  $("#voce").classList.toggle("parla", parla);
+function voiceStatus(text, speaking = false) {
+  $("#voice-status").textContent = text;
+  $("#voice").classList.toggle("speaking", speaking);
 }
 
-function animaOnde(livello) {
-  document.querySelectorAll("#voce-onde i").forEach((b, i) => {
-    const h = 6 + Math.min(1, livello * (0.6 + 0.4 * Math.sin(Date.now() / 120 + i))) * 20;
+function animateWaves(level) {
+  document.querySelectorAll("#voice-waves i").forEach((b, i) => {
+    const h = 6 + Math.min(1, level * (0.6 + 0.4 * Math.sin(Date.now() / 120 + i))) * 20;
     b.style.height = `${h}px`;
   });
 }
 
-function aggiungiTurno(chi, testo) {
-  voce.turni.push({ chi, testo, t: Math.round((Date.now() - voce.inizio) / 1000) });
-  $("#voce-ultimo").textContent = `${chi === "you" ? "You" : "PoliBuddy"}: ${testo.replace(/\$/g, "")}`;
+function addTurn(who, text) {
+  voice.turns.push({ who, text, t: Math.round((Date.now() - voice.start) / 1000) });
+  $("#voice-last").textContent = `${who === "you" ? "You" : "PoliBuddy"}: ${text.replace(/\$/g, "")}`;
 }
 
-async function avviaVoce() {
-  if (voce.attiva) return;
-  const usaServer = stato.modalita === "modello" && navigator.mediaDevices && window.MediaRecorder;
-  const Riconoscitore = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!usaServer && !Riconoscitore) {
-    aggiungiMsg("Voice is not available here: it needs the OpenAI key or a browser with speech recognition (Chrome, Edge).", "letto ko");
+async function startVoice() {
+  if (voice.active) return;
+  const serverStt = state.status.stt && navigator.mediaDevices && window.MediaRecorder;
+  const Recognizer = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!serverStt && !Recognizer) {
+    addMessage("Voice is not available here: it needs a browser with speech recognition (Chrome, Edge) or a speech-to-text model on the server.", "read failed");
     return;
   }
-  voce.attiva = true;
-  voce.turni = [];
-  voce.inizio = Date.now();
-  voce.usaServer = usaServer;
-  $("#voce").hidden = false;
-  $("#mic").classList.add("attivo");
+  voice.active = true;
+  voice.turns = [];
+  voice.start = Date.now();
+  voice.serverStt = Boolean(serverStt);
+  $("#voice").hidden = false;
+  $("#mic").classList.add("recording");
   try {
-    if (usaServer) {
-      voce.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      voce.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      voce.analyser = voce.ctx.createAnalyser();
-      voce.analyser.fftSize = 1024;
-      voce.ctx.createMediaStreamSource(voce.stream).connect(voce.analyser);
+    if (voice.serverStt) {
+      voice.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voice.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      voice.analyser = voice.ctx.createAnalyser();
+      voice.analyser.fftSize = 1024;
+      voice.ctx.createMediaStreamSource(voice.stream).connect(voice.analyser);
     }
-    ascolta();
+    listen();
   } catch (e) {
-    aggiungiMsg(`I can't use the microphone: ${e.message}`, "letto ko");
-    chiudiVoce(false);
+    addMessage(`I can't use the microphone: ${e.message}`, "read failed");
+    closeVoice(false);
   }
 }
 
-function ascolta() {
-  if (!voce.attiva) return;
-  voceStato("Listening… explain your idea");
-  if (!voce.usaServer) return ascoltaBrowser();
+function listen() {
+  if (!voice.active) return;
+  voiceStatus("Listening… explain your idea");
+  if (!voice.serverStt) return listenInBrowser();
 
-  voce.pezzi = [];
-  const tipo = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
-  voce.recorder = new MediaRecorder(voce.stream, tipo ? { mimeType: tipo } : {});
-  voce.recorder.ondataavailable = (e) => { if (e.data.size) voce.pezzi.push(e.data); };
-  voce.recorder.onstop = () => elaboraAudio();
-  voce.recorder.start(250);
+  voice.chunks = [];
+  const type = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "";
+  voice.recorder = new MediaRecorder(voice.stream, type ? { mimeType: type } : {});
+  voice.recorder.ondataavailable = (e) => { if (e.data.size) voice.chunks.push(e.data); };
+  voice.recorder.onstop = () => processAudio();
+  voice.recorder.start(250);
 
   // simple voice-activity detection: stop after ~1.3 s of silence once the student has spoken
-  const buf = new Uint8Array(voce.analyser.fftSize);
-  let parlato = false, silenzioDa = Date.now();
-  const inizio = Date.now();
-  clearInterval(voce.timer);
-  voce.timer = setInterval(() => {
-    voce.analyser.getByteTimeDomainData(buf);
-    let somma = 0;
-    for (const v of buf) somma += ((v - 128) / 128) ** 2;
-    const rms = Math.sqrt(somma / buf.length);
-    animaOnde(rms * 12);
-    if (rms > 0.035) { parlato = true; silenzioDa = Date.now(); }
-    const fermo = Date.now() - silenzioDa;
-    if ((parlato && fermo > 1300) || Date.now() - inizio > 30000) fineTurno();
+  const buf = new Uint8Array(voice.analyser.fftSize);
+  let spoke = false, silentSince = Date.now();
+  const started = Date.now();
+  clearInterval(voice.timer);
+  voice.timer = setInterval(() => {
+    voice.analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (const v of buf) sum += ((v - 128) / 128) ** 2;
+    const rms = Math.sqrt(sum / buf.length);
+    animateWaves(rms * 12);
+    if (rms > 0.035) { spoke = true; silentSince = Date.now(); }
+    if ((spoke && Date.now() - silentSince > 1300) || Date.now() - started > 30000) endTurn();
   }, 80);
 }
 
-function fineTurno() {
-  clearInterval(voce.timer);
-  animaOnde(0);
-  if (voce.recorder && voce.recorder.state === "recording") voce.recorder.stop();
-  if (voce.riconoscitore) voce.riconoscitore.stop();
+function endTurn() {
+  clearInterval(voice.timer);
+  animateWaves(0);
+  if (voice.recorder && voice.recorder.state === "recording") voice.recorder.stop();
+  if (voice.recognizer) voice.recognizer.stop();
 }
 
-async function elaboraAudio() {
-  if (!voce.attiva) return;
-  const blob = new Blob(voce.pezzi, { type: voce.recorder.mimeType || "audio/webm" });
-  if (blob.size < 2500) return ascolta();
-  voceStato("Transcribing…");
-  const dati = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(blob); });
+async function processAudio() {
+  if (!voice.active) return;
+  const blob = new Blob(voice.chunks, { type: voice.recorder.mimeType || "audio/webm" });
+  if (blob.size < 2500) return listen();
+  voiceStatus("Transcribing…");
   try {
-    const { testo } = await api("/api/voce/trascrivi", { audio: dati, tipo: blob.type });
-    await turnoStudente(testo);
+    const { text } = await api("/api/voice/transcribe", { audio: await readAsDataURL(blob), type: blob.type });
+    await studentTurn(text);
   } catch (e) {
-    voceStato("I didn't catch that, try again");
-    setTimeout(ascolta, 900);
+    voiceStatus(e.status === 429 ? "Too many requests, wait a moment" : "I didn't catch that, try again");
+    setTimeout(listen, e.status === 429 ? 5000 : 900);
   }
 }
 
-function ascoltaBrowser() {
-  const Riconoscitore = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const rec = new Riconoscitore();
-  voce.riconoscitore = rec;
+function listenInBrowser() {
+  const Recognizer = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new Recognizer();
+  voice.recognizer = rec;
   rec.lang = "en-US";
   rec.interimResults = false;
-  let detto = "";
-  rec.onresult = (e) => { detto = [...e.results].map((r) => r[0].transcript).join(" "); };
+  let said = "";
+  rec.onresult = (e) => { said = [...e.results].map((r) => r[0].transcript).join(" "); };
   rec.onerror = () => {};
   rec.onend = () => {
-    voce.riconoscitore = null;
-    if (!voce.attiva) return;
-    if (detto.trim()) turnoStudente(detto.trim()); else ascolta();
+    voice.recognizer = null;
+    if (!voice.active) return;
+    if (said.trim()) studentTurn(said.trim()); else listen();
   };
-  clearInterval(voce.timer);
-  voce.timer = setInterval(() => animaOnde(Math.random() * 0.6), 120);
+  clearInterval(voice.timer);
+  voice.timer = setInterval(() => animateWaves(Math.random() * 0.6), 120);
   rec.start();
 }
 
-async function turnoStudente(testo) {
-  if (!voce.attiva) return;
-  aggiungiTurno("you", testo);
-  voceStato("PoliBuddy is thinking…");
-  const r = await invia(testo, { voce: true });
-  if (!r || !voce.attiva) return voce.attiva && ascolta();
-  const risposta = r.messaggi.join(" ");
-  aggiungiTurno("buddy", risposta);
-  await parla(risposta);
-  if (voce.attiva) ascolta();
+async function studentTurn(text) {
+  if (!voice.active) return;
+  addTurn("you", text);
+  voiceStatus("PoliBuddy is thinking…");
+  const r = await send(text, { voice: true });
+  if (!r || !voice.active) return voice.active && listen();
+  const reply = r.messages.join(" ");
+  addTurn("buddy", reply);
+  await speak(reply);
+  if (voice.active) listen();
 }
 
-function parlato(testo) {
-  return testo.replace(/\$/g, "").replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, "$1 over $2").replace(/\\[a-z]+/g, " ").replace(/[{}^_]/g, " ");
+function spokenText(text) {
+  return text.replace(/\$/g, "").replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, "$1 over $2").replace(/\\[a-z]+/g, " ").replace(/[{}^_]/g, " ");
 }
 
-async function parla(testo) {
-  voceStato("PoliBuddy is speaking…", true);
-  clearInterval(voce.timer);
-  voce.timer = setInterval(() => animaOnde(0.35 + Math.random() * 0.5), 110);
+function speakInBrowser(text) {
+  if (!window.speechSynthesis) return Promise.resolve();
+  return new Promise((ok) => {
+    const u = new SpeechSynthesisUtterance(spokenText(text));
+    u.lang = "en-US";
+    u.onend = ok;
+    u.onerror = ok;
+    speechSynthesis.speak(u);
+  });
+}
+
+async function speak(text) {
+  voiceStatus("PoliBuddy is speaking…", true);
+  clearInterval(voice.timer);
+  voice.timer = setInterval(() => animateWaves(0.35 + Math.random() * 0.5), 110);
   try {
-    if (voce.usaServer) {
-      const res = await fetch("/api/voce/parla", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ testo }),
+    let played = false;
+    if (state.status.tts) {
+      const res = await fetch("/api/voice/speak", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
       });
-      if (!res.ok) throw new Error("tts");
-      const url = URL.createObjectURL(await res.blob());
-      await new Promise((ok) => {
-        voce.audio = new Audio(url);
-        voce.audio.onended = ok;
-        voce.audio.onerror = ok;
-        voce.audio.play().catch(ok);
-      });
-      URL.revokeObjectURL(url);
-    } else if (window.speechSynthesis) {
-      await new Promise((ok) => {
-        const u = new SpeechSynthesisUtterance(parlato(testo));
-        u.lang = "en-US";
-        u.onend = ok;
-        u.onerror = ok;
-        speechSynthesis.speak(u);
-      });
+      if (res.ok) {
+        const url = URL.createObjectURL(await res.blob());
+        await new Promise((ok) => {
+          voice.audio = new Audio(url);
+          voice.audio.onended = ok;
+          voice.audio.onerror = ok;
+          voice.audio.play().catch(ok);
+        });
+        URL.revokeObjectURL(url);
+        played = true;
+      }
     }
+    if (!played) await speakInBrowser(text);
   } catch (_) { /* the text is in the chat anyway */ }
-  clearInterval(voce.timer);
-  animaOnde(0);
+  clearInterval(voice.timer);
+  animateWaves(0);
 }
 
-function chiudiVoce(conTrascrizione = true) {
-  voce.attiva = false;
-  clearInterval(voce.timer);
-  if (voce.recorder && voce.recorder.state === "recording") { voce.recorder.onstop = null; voce.recorder.stop(); }
-  if (voce.riconoscitore) { voce.riconoscitore.onend = null; voce.riconoscitore.abort(); }
-  if (voce.audio) voce.audio.pause();
+function closeVoice(withTranscript = true) {
+  voice.active = false;
+  clearInterval(voice.timer);
+  if (voice.recorder && voice.recorder.state === "recording") { voice.recorder.onstop = null; voice.recorder.stop(); }
+  if (voice.recognizer) { voice.recognizer.onend = null; voice.recognizer.abort(); }
+  if (voice.audio) voice.audio.pause();
   if (window.speechSynthesis) speechSynthesis.cancel();
-  if (voce.stream) voce.stream.getTracks().forEach((t) => t.stop());
-  if (voce.ctx) voce.ctx.close();
-  voce.stream = voce.ctx = voce.recorder = null;
-  $("#voce").hidden = true;
-  $("#mic").classList.remove("attivo");
-  if (conTrascrizione && voce.turni.length) mostraTrascrizione();
+  if (voice.stream) voice.stream.getTracks().forEach((t) => t.stop());
+  if (voice.ctx) voice.ctx.close();
+  voice.stream = voice.ctx = voice.recorder = null;
+  $("#voice").hidden = true;
+  $("#mic").classList.remove("recording");
+  if (withTranscript && voice.turns.length) showTranscript();
 }
 
-function mostraTrascrizione() {
-  const durata = Math.max(1, Math.round((Date.now() - voce.inizio) / 1000));
+function showTranscript() {
+  const duration = Math.max(1, Math.round((Date.now() - voice.start) / 1000));
   const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   const card = document.createElement("div");
-  card.className = "trascrizione";
-  card.innerHTML = `<div class="trascrizione-head"><div><strong>Voice conversation transcript</strong>
+  card.className = "transcript";
+  card.innerHTML = `<div class="transcript-head"><div><strong>Voice conversation transcript</strong>
     <div class="muted small"></div></div><button type="button" class="link-btn">Download .txt</button></div><ol></ol>`;
-  card.querySelector(".muted").textContent = `${mmss(durata)} · ${voce.turni.length} turns · ${stato.esercizio?.titolo || ""}`;
+  card.querySelector(".muted").textContent = `${mmss(duration)} · ${voice.turns.length} turns · ${state.exercise?.title || ""}`;
   const ol = card.querySelector("ol");
-  voce.turni.forEach((t) => {
+  voice.turns.forEach((t) => {
     const li = document.createElement("li");
-    li.className = t.chi === "you" ? "tu" : "buddy";
+    li.className = t.who === "you" ? "you" : "buddy";
     li.innerHTML = `<time></time><b></b> <span></span>`;
     li.querySelector("time").textContent = mmss(t.t);
-    li.querySelector("b").textContent = t.chi === "you" ? "You:" : "PoliBuddy:";
-    li.querySelector("span").textContent = t.chi === "you" ? mathify(t.testo) : t.testo;
+    li.querySelector("b").textContent = t.who === "you" ? "You:" : "PoliBuddy:";
+    li.querySelector("span").textContent = t.who === "you" ? mathify(t.text) : t.text;
     ol.appendChild(li);
   });
-  const righe = [`PoliBuddy · voice conversation transcript`, `Exercise: ${stato.esercizio?.titolo || ""}`, `Duration: ${mmss(durata)}`, ""]
-    .concat(voce.turni.map((t) => `[${mmss(t.t)}] ${t.chi === "you" ? "You" : "PoliBuddy"}: ${t.testo}`));
+  const lines = ["PoliBuddy · voice conversation transcript", `Exercise: ${state.exercise?.title || ""}`, `Duration: ${mmss(duration)}`, ""]
+    .concat(voice.turns.map((t) => `[${mmss(t.t)}] ${t.who === "you" ? "You" : "PoliBuddy"}: ${t.text}`));
   card.querySelector("button").addEventListener("click", () => {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([righe.join("\n")], { type: "text/plain" }));
+    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/plain" }));
     a.download = `polibuddy-transcript-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`;
     a.click();
   });
@@ -576,60 +590,60 @@ function mostraTrascrizione() {
   $("#messages").scrollTop = $("#messages").scrollHeight;
 }
 
-$("#mic").addEventListener("click", () => (voce.attiva ? chiudiVoce() : avviaVoce()));
-$("#voce-fine-turno").addEventListener("click", fineTurno);
-$("#voce-chiudi").addEventListener("click", () => chiudiVoce());
+$("#mic").addEventListener("click", () => (voice.active ? closeVoice() : startVoice()));
+$("#voice-end-turn").addEventListener("click", endTurn);
+$("#voice-close").addEventListener("click", () => closeVoice());
 
 /* ---------------- Results: table and chart ---------------- */
-function mostraRisultati(ex) {
-  stato.ultimaEsecuzione = ex;
-  $("#risultati-vuoti").hidden = true;
-  $("#risultati-body").hidden = false;
-  const v = $("#verdetto");
+function showResults(run) {
+  $("#results-empty").hidden = true;
+  $("#results-body").hidden = false;
+  const v = $("#verdict");
   v.hidden = false;
-  v.className = `verdict ${ex.torna ? "si" : "no"}`;
-  v.textContent = ex.torna ? "It works!" : "Doesn't add up";
-  $("#lab-previsto").textContent = ex.etichetta_previsto;
-  $("#lab-tendenza").textContent = ex.etichetta_tendenza;
-  $("#val-previsto").textContent = ex.previsto;
-  $("#val-tendenza").textContent = "…";
+  v.className = `verdict ${run.works ? "yes" : "no"}`;
+  v.textContent = run.works ? "It works!" : "Doesn't add up";
+  $("#predicted-label").textContent = run.predicted_label;
+  $("#observed-label").textContent = run.observed_label;
+  $("#predicted-value").textContent = run.predicted;
+  $("#observed-value").textContent = "…";
 
-  const thead = $("#tabella thead");
+  const thead = $("#results-table thead");
   thead.innerHTML = "";
   const trh = document.createElement("tr");
-  ex.colonne.forEach((c) => { const th = document.createElement("th"); th.textContent = c; trh.appendChild(th); });
+  run.columns.forEach((c) => { const th = document.createElement("th"); th.textContent = c; trh.appendChild(th); });
   thead.appendChild(trh);
 
-  const tbody = $("#tabella tbody");
+  const tbody = $("#results-table tbody");
   tbody.innerHTML = "";
-  const passo = Math.max(90, Math.min(380, 1600 / Math.max(ex.righe.length, 1)));
-  ex.righe.forEach((riga, i) => {
+  const step = Math.max(90, Math.min(380, 1600 / Math.max(run.rows.length, 1)));
+  run.rows.forEach((row, i) => {
     setTimeout(() => {
       const tr = document.createElement("tr");
-      tr.className = `entra${i === ex.evidenzia ? " evidenzia" : ""}`;
-      riga.forEach((c) => { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
+      tr.className = `enter${i === run.highlight ? " highlight" : ""}`;
+      row.forEach((c) => { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); });
       tbody.appendChild(tr);
       tr.scrollIntoView({ block: "nearest" });
-      if (i === ex.righe.length - 1) $("#val-tendenza").textContent = ex.tendenza;
-    }, passo * i + 150);
+      if (i === run.rows.length - 1) $("#observed-value").textContent = run.observed;
+    }, step * i + 150);
   });
-  if (!ex.righe.length) $("#val-tendenza").textContent = ex.tendenza;
-  disegnaGrafico(ex.grafico, true);
+  if (!run.rows.length) $("#observed-value").textContent = run.observed;
+  drawChart(run.chart, true);
 }
 
-const COLORE = { vero: "#073766", tuo: "#ff8a18", obiettivo: "#00a99b" };
+const COLOR = { true: "#073766", yours: "#ff8a18", target: "#00a99b" };
 
-function disegnaGrafico(g, anima) {
-  const svg = $("#grafico");
+function drawChart(g, animate) {
+  const svg = $("#chart");
   const W = 440, H = 270, m = { l: 48, r: 18, t: 18, b: 34 };
   const css = getComputedStyle(document.documentElement);
   const cLine = css.getPropertyValue("--line").trim();
   const cMuted = css.getPropertyValue("--muted").trim();
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const ys = [];
-  g.serie.forEach((s) => s.punti.forEach((p) => { if (p[1] !== null) ys.push(p[1]); }));
-  g.linee.forEach((l) => ys.push(l.y));
-  if (g.marcatore && g.marcatore.y !== null) ys.push(g.marcatore.y);
+  g.series.forEach((s) => s.points.forEach((p) => { if (p[1] !== null) ys.push(p[1]); }));
+  g.lines.forEach((l) => ys.push(l.y));
+  if (g.marker && g.marker.y !== null) ys.push(g.marker.y);
   ys.push(0);
   let yMin = Math.min(...ys), yMax = Math.max(...ys);
   const pad = (yMax - yMin) * 0.12 || 1;
@@ -638,12 +652,12 @@ function disegnaGrafico(g, anima) {
   const Y = (y) => m.t + (1 - (y - yMin) / (yMax - yMin)) * (H - m.t - m.b);
   const num = (v) => v.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
-  const percorso = (punti) => {
-    let d = "", aperto = false;
-    punti.forEach(([x, y]) => {
-      if (y === null || y < yMin || y > yMax) { aperto = false; return; }
-      d += `${aperto ? "L" : "M"}${X(x).toFixed(1)},${Y(y).toFixed(1)} `;
-      aperto = true;
+  const path = (points) => {
+    let d = "", open = false;
+    points.forEach(([x, y]) => {
+      if (y === null || y < yMin || y > yMax) { open = false; return; }
+      d += `${open ? "L" : "M"}${X(x).toFixed(1)},${Y(y).toFixed(1)} `;
+      open = true;
     });
     return d;
   };
@@ -658,42 +672,42 @@ function disegnaGrafico(g, anima) {
   });
   s += `<text x="${m.l}" y="${H - 10}" font-size="13" fill="${cMuted}">${num(g.x_min)}</text>`;
   s += `<text x="${W - m.r}" y="${H - 10}" text-anchor="end" font-size="13" fill="${cMuted}">${num(g.x_max)}</text>`;
-  s += `<text x="${(m.l + W - m.r) / 2}" y="${H - 10}" text-anchor="middle" font-size="13" fill="${cMuted}">${g.asse_x}</text>`;
+  s += `<text x="${(m.l + W - m.r) / 2}" y="${H - 10}" text-anchor="middle" font-size="13" fill="${cMuted}">${esc(g.x_label)}</text>`;
 
-  g.linee.forEach((l) => {
-    s += `<line x1="${m.l}" y1="${Y(l.y)}" x2="${W - m.r}" y2="${Y(l.y)}" stroke="${COLORE[l.ruolo]}" stroke-width="2.6" stroke-dasharray="7 6"/>`;
-    s += `<text x="${W - m.r - 4}" y="${Y(l.y) - 7}" text-anchor="end" font-size="12.5" font-weight="700" fill="${COLORE[l.ruolo]}">${l.etichetta}</text>`;
+  g.lines.forEach((l) => {
+    s += `<line x1="${m.l}" y1="${Y(l.y)}" x2="${W - m.r}" y2="${Y(l.y)}" stroke="${COLOR[l.role]}" stroke-width="2.6" stroke-dasharray="7 6"/>`;
+    s += `<text x="${W - m.r - 4}" y="${Y(l.y) - 7}" text-anchor="end" font-size="12.5" font-weight="700" fill="${COLOR[l.role]}">${esc(l.label)}</text>`;
   });
-  g.serie.forEach((serie) => {
-    const tratteggio = serie.ruolo === "tuo" ? ' stroke-dasharray="7 6"' : "";
-    s += `<path class="curva ${serie.ruolo}" d="${percorso(serie.punti)}" fill="none" stroke="${COLORE[serie.ruolo]}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"${tratteggio}/>`;
-    if (serie.punti_visibili) {
-      serie.punti.forEach(([x, y]) => {
-        if (y !== null) s += `<circle cx="${X(x)}" cy="${Y(y)}" r="3.6" fill="${COLORE[serie.ruolo]}"/>`;
+  g.series.forEach((serie) => {
+    const dashed = serie.role === "yours" ? ' stroke-dasharray="7 6"' : "";
+    s += `<path class="curve ${serie.role}" d="${path(serie.points)}" fill="none" stroke="${COLOR[serie.role]}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"${dashed}/>`;
+    if (serie.show_points) {
+      serie.points.forEach(([x, y]) => {
+        if (y !== null) s += `<circle cx="${X(x)}" cy="${Y(y)}" r="3.6" fill="${COLOR[serie.role]}"/>`;
       });
     }
   });
-  const mk = g.marcatore;
+  const mk = g.marker;
   if (mk && mk.y !== null && mk.y >= yMin && mk.y <= yMax) {
-    const c = COLORE[mk.ruolo];
-    const destra = X(mk.x) > W * 0.62;
+    const c = COLOR[mk.role];
+    const right = X(mk.x) > W * 0.62;
     s += `<circle cx="${X(mk.x)}" cy="${Y(mk.y)}" r="6.5" fill="#fff" stroke="${c}" stroke-width="3.2"/>`;
-    s += `<text x="${X(mk.x) + (destra ? -12 : 12)}" y="${Y(mk.y) - 12}" text-anchor="${destra ? "end" : "start"}" font-size="15" font-weight="800" fill="${c}">${mk.testo}</text>`;
+    s += `<text x="${X(mk.x) + (right ? -12 : 12)}" y="${Y(mk.y) - 12}" text-anchor="${right ? "end" : "start"}" font-size="15" font-weight="800" fill="${c}">${esc(mk.text)}</text>`;
   }
   svg.innerHTML = s;
 
-  const leg = $("#legenda");
-  leg.innerHTML = "";
-  [...g.serie, ...g.linee].forEach((el) => {
-    if (!el.etichetta) return;
+  const legend = $("#legend");
+  legend.innerHTML = "";
+  [...g.series, ...g.lines].forEach((el) => {
+    if (!el.label) return;
     const span = document.createElement("span");
-    span.innerHTML = `<i style="background:${COLORE[el.ruolo]}"></i>`;
-    span.append(el.etichetta);
-    leg.appendChild(span);
+    span.innerHTML = `<i style="background:${COLOR[el.role]}"></i>`;
+    span.append(el.label);
+    legend.appendChild(span);
   });
 
-  if (anima) {
-    svg.querySelectorAll("path.curva.vero").forEach((p) => {
+  if (animate) {
+    svg.querySelectorAll("path.curve.true").forEach((p) => {
       const L = p.getTotalLength();
       p.style.strokeDasharray = `${L}`;
       p.style.strokeDashoffset = `${L}`;
@@ -705,189 +719,193 @@ function disegnaGrafico(g, anima) {
 }
 
 /* ---------------- Whiteboard ---------------- */
-const canvas = $("#lavagna");
+const canvas = $("#whiteboard");
 const ctx = canvas.getContext("2d");
-let penna = "ink", disegnando = false;
+let pen = "ink", drawing = false;
 
-function preparaLavagna() {
+function prepareBoard() {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (!w || !h) return;
-  const copia = stato.lavagnaSporca ? canvas.toDataURL() : null;
+  const copy = state.boardDirty ? canvas.toDataURL() : null;
   canvas.width = w * dpr; canvas.height = h * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, w, h);
-  if (copia) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, w, h); img.src = copia; }
+  if (copy) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, w, h); img.src = copy; }
 }
-function posizione(e) {
+function position(e) {
   const r = canvas.getBoundingClientRect();
   return [e.clientX - r.left, e.clientY - r.top];
 }
 canvas.addEventListener("pointerdown", (e) => {
-  disegnando = true;
+  drawing = true;
   canvas.setPointerCapture(e.pointerId);
-  const [x, y] = posizione(e);
+  const [x, y] = position(e);
   ctx.beginPath(); ctx.moveTo(x, y);
 });
 canvas.addEventListener("pointermove", (e) => {
-  if (!disegnando) return;
-  const [x, y] = posizione(e);
+  if (!drawing) return;
+  const [x, y] = position(e);
   ctx.lineCap = "round"; ctx.lineJoin = "round";
-  if (penna === "eraser") { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 22; }
-  else { ctx.strokeStyle = penna === "accent" ? "#ff8a18" : "#073766"; ctx.lineWidth = 3; }
+  if (pen === "eraser") { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 22; }
+  else { ctx.strokeStyle = pen === "accent" ? "#ff8a18" : "#073766"; ctx.lineWidth = 3; }
   ctx.lineTo(x, y); ctx.stroke();
-  if (!stato.lavagnaSporca) { stato.lavagnaSporca = true; $("#allega").checked = true; }
+  if (!state.boardDirty) { state.boardDirty = true; $("#attach-board").checked = true; }
 });
-["pointerup", "pointerleave", "pointercancel"].forEach((ev) => canvas.addEventListener(ev, () => { disegnando = false; }));
+["pointerup", "pointerleave", "pointercancel"].forEach((ev) => canvas.addEventListener(ev, () => { drawing = false; }));
 document.querySelectorAll("[data-pen]").forEach((b) => b.addEventListener("click", () => {
-  penna = b.dataset.pen;
+  pen = b.dataset.pen;
   document.querySelectorAll("[data-pen]").forEach((x) => x.classList.toggle("active", x === b));
 }));
-$("#pulisci").addEventListener("click", () => {
-  stato.lavagnaSporca = false;
-  $("#allega").checked = false;
-  preparaLavagna();
+$("#clear-board").addEventListener("click", () => {
+  state.boardDirty = false;
+  $("#attach-board").checked = false;
+  prepareBoard();
 });
-window.addEventListener("resize", preparaLavagna);
+window.addEventListener("resize", prepareBoard);
 
 /* ---------------- Teacher ---------------- */
-const NOMI_ESITI = {
-  da_solo: "found alone", dopo_domanda: "after a question", dopo_slide: "after the slide",
-  con_spunto: "with a hint", non_risolto: "not solved",
+const OUTCOME_NAMES = {
+  alone: "found alone", after_question: "after a question", after_slide: "after the slide",
+  with_hint: "with a hint", unsolved: "not solved",
 };
-const PILL = { ok: "on track", attenzione: "attention", nessun_dato: "no data", insufficiente: "not enough data" };
+const PILL = { ok: "on track", attention: "attention", no_data: "no data", not_enough: "not enough data" };
 
-async function caricaDocente(corso) {
-  stato.corsoDocente = corso || stato.corsoDocente;
-  const d = await api(`/api/radar?corso=${encodeURIComponent(stato.corsoDocente)}`);
+async function loadTeacher(course) {
+  state.teacherCourse = course || state.teacherCourse;
+  const d = await api(`/api/radar?course=${encodeURIComponent(state.teacherCourse)}`);
 
-  const seg = $("#d-corsi");
+  const seg = $("#t-courses");
   seg.innerHTML = "";
-  d.corsi.forEach((c) => {
+  d.courses.forEach((c) => {
     const b = document.createElement("button");
-    b.textContent = c.nome;
-    b.className = c.id === d.corso ? "on" : "";
-    b.addEventListener("click", () => caricaDocente(c.id));
+    b.textContent = c.name;
+    b.className = c.id === d.course ? "on" : "";
+    b.addEventListener("click", () => loadTeacher(c.id));
     seg.appendChild(b);
   });
 
-  $("#d-corso").textContent = d.corso_nome;
-  const reali = d.sessioni_reali === 1 ? "1 real session" : `${d.sessioni_reali} real sessions`;
-  $("#docente-nota").textContent = `Anonymous, aggregated data · for the demo it includes simulated sessions (${reali} from this demo).`;
-  $("#privacy-testo").textContent =
-    `The teacher only sees anonymous, aggregated data, never an individual student. Below ${d.soglia} sessions the data is not shown.`;
-  $("#k-sessioni").textContent = d.sessioni_totali;
-  $("#k-primo").textContent = `${d.primo_colpo_pct}%`;
-  $("#k-solo").textContent = `${d.da_solo_pct}%`;
-  $("#k-critico").textContent = d.critico ? `${d.critico.titolo} · ${d.critico.da_solo_pct}% alone` : "—";
+  $("#t-course").textContent = d.course_name;
+  const real = d.real_sessions === 1 ? "1 real session" : `${d.real_sessions} real sessions`;
+  $("#teacher-note").textContent = `Anonymous, aggregated data · for the demo it includes simulated sessions (${real} from this demo).`;
+  $("#privacy-text").textContent =
+    `The teacher only sees anonymous, aggregated data, never an individual student. Below ${d.min_sessions} sessions the data is not shown.`;
+  $("#k-sessions").textContent = d.total_sessions;
+  $("#k-first").textContent = `${d.first_try_pct}%`;
+  $("#k-alone").textContent = `${d.alone_pct}%`;
+  $("#k-critical").textContent = d.critical ? `${d.critical.title} · ${d.critical.alone_pct}% alone` : "—";
 
-  const lac = $("#lacune");
-  lac.innerHTML = "";
-  d.lacune.forEach((l) => {
+  const gaps = $("#gaps");
+  gaps.innerHTML = "";
+  d.gaps.forEach((g) => {
     const div = document.createElement("div");
-    div.className = "lacuna";
-    div.innerHTML = `<div class="lacuna-nome"></div><div class="muted small"></div><div class="lacuna-barra"><span style="width:0%"></span></div>`;
-    div.querySelector(".lacuna-nome").textContent = l.errore || l.titolo;
-    div.querySelector(".muted").textContent = `${l.titolo}: found alone in ${l.da_solo_pct}% of ${l.n} sessions with a mistake`;
-    lac.appendChild(div);
+    div.className = "gap";
+    div.innerHTML = `<div class="gap-name"></div><div class="muted small"></div><div class="gap-bar"><span style="width:0%"></span></div>`;
+    div.querySelector(".gap-name").textContent = g.mistake || g.title;
+    div.querySelector(".muted").textContent = `${g.title}: found alone in ${g.alone_pct}% of ${g.n} sessions with a mistake`;
+    gaps.appendChild(div);
     renderMath(div);
-    setTimeout(() => { div.querySelector(".lacuna-barra span").style.width = `${l.da_solo_pct}%`; }, 80);
+    setTimeout(() => { div.querySelector(".gap-bar span").style.width = `${g.alone_pct}%`; }, 80);
   });
 
-  const leg = $("#legenda-esiti");
-  leg.innerHTML = "";
-  d.esiti.forEach((e, i) => {
+  const legend = $("#outcome-legend");
+  legend.innerHTML = "";
+  d.outcomes.forEach((o, i) => {
     const s = document.createElement("span");
     s.innerHTML = `<i style="background:var(--s${i + 1})"></i>`;
-    s.append(NOMI_ESITI[e]);
-    leg.appendChild(s);
+    s.append(OUTCOME_NAMES[o]);
+    legend.appendChild(s);
   });
 
-  const barre = $("#barre");
-  barre.innerHTML = "";
-  d.esercizi.forEach((es) => {
-    const riga = document.createElement("div");
-    riga.className = "barra-riga";
-    const nome = document.createElement("div");
-    nome.className = "barra-nome";
-    nome.textContent = es.titolo;
-    const sotto = document.createElement("div");
-    sotto.className = "muted small";
-    sotto.textContent = es.sufficiente ? `${es.tipo} · first try ${es.primo_colpo_pct}%` : es.tipo;
-    nome.appendChild(sotto);
-    riga.appendChild(nome);
+  const bars = $("#bars");
+  bars.innerHTML = "";
+  d.exercises.forEach((ex) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    const name = document.createElement("div");
+    name.className = "bar-name";
+    name.textContent = ex.title;
+    const sub = document.createElement("div");
+    sub.className = "muted small";
+    sub.textContent = ex.enough ? `${ex.topic} · first try ${ex.first_try_pct}%` : ex.topic;
+    name.appendChild(sub);
+    row.appendChild(name);
 
-    const centro = document.createElement("div");
-    if (es.sufficiente) {
-      centro.className = "barra";
-      d.esiti.forEach((e, i) => {
+    const center = document.createElement("div");
+    if (ex.enough) {
+      center.className = "bar";
+      d.outcomes.forEach((o, i) => {
         const span = document.createElement("span");
         span.style.width = "0%";
         span.style.background = `var(--s${i + 1})`;
-        span.title = `${NOMI_ESITI[e]}: ${es.esiti_pct[e]}%`;
-        centro.appendChild(span);
-        setTimeout(() => { span.style.width = `${es.esiti_pct[e]}%`; }, 80);
+        span.title = `${OUTCOME_NAMES[o]}: ${ex.outcomes_pct[o]}%`;
+        center.appendChild(span);
+        setTimeout(() => { span.style.width = `${ex.outcomes_pct[o]}%`; }, 80);
       });
     } else {
-      centro.className = "insuff";
-      centro.textContent = `not enough data (fewer than ${d.soglia} sessions): hidden`;
+      center.className = "hidden-data";
+      center.textContent = `not enough data (fewer than ${d.min_sessions} sessions): hidden`;
     }
-    riga.appendChild(centro);
+    row.appendChild(center);
     const n = document.createElement("div");
-    n.className = "barra-n";
-    n.textContent = `${es.n} sessions`;
-    riga.appendChild(n);
-    barre.appendChild(riga);
+    n.className = "bar-n";
+    n.textContent = `${ex.n} sessions`;
+    row.appendChild(n);
+    bars.appendChild(row);
   });
 
-  const demo = await api(`/api/crash-test/demo?corso=${encodeURIComponent(d.corso)}`);
-  $("#domande").value = demo.domande.join("\n");
+  const demo = await api(`/api/crash-test/demo?course=${encodeURIComponent(d.course)}`);
+  $("#questions").value = demo.questions.join("\n");
   $("#crash-report").innerHTML = "";
 }
 
 $("#crash-btn").addEventListener("click", async () => {
-  const { report } = await api("/api/crash-test", { domande: $("#domande").value.split("\n") });
+  const { report } = await api("/api/crash-test", { questions: $("#questions").value.split("\n") });
   const box = $("#crash-report");
   box.innerHTML = "";
-  report.forEach((v) => {
+  report.forEach((item) => {
     const div = document.createElement("div");
-    div.className = "crash-voce";
+    div.className = "crash-item";
     div.innerHTML = `<div class="q"><span class="pill"></span><span class="t"></span></div><div class="muted small c"></div><div class="small r"></div>`;
-    div.querySelector(".pill").className = `pill ${v.stato}`;
-    div.querySelector(".pill").textContent = PILL[v.stato] || v.stato;
-    div.querySelector(".t").textContent = `${v.numero}. ${mathify(v.domanda)}`;
-    div.querySelector(".c").textContent = v.concetti.length ? `Concepts: ${v.concetti.join(", ")}` : "";
-    div.querySelector(".r").textContent = v.testo;
+    div.querySelector(".pill").className = `pill ${item.status}`;
+    div.querySelector(".pill").textContent = PILL[item.status] || item.status;
+    div.querySelector(".t").textContent = `${item.number}. ${mathify(item.question)}`;
+    div.querySelector(".c").textContent = item.concepts.length ? `Concepts: ${item.concepts.join(", ")}` : "";
+    div.querySelector(".r").textContent = item.text;
     box.appendChild(div);
     renderMath(div);
   });
 });
 
 /* ---------------- Start ---------------- */
-async function avvio() {
-  preparaLavagna();
+async function boot() {
+  prepareBoard();
   try {
-    const s = await api("/api/stato");
-    stato.modalita = s.modalita;
-    const badge = $("#badge-modo");
-    badge.textContent = s.modalita === "modello" ? `OpenAI · ${s.modello}` : "Offline · rules";
-    badge.classList.toggle("live", s.modalita === "modello");
-    if (s.modalita !== "modello") {
-      $("#lavagna-nota").textContent =
-        "Offline mode: the whiteboard and photos are not read. Add the OpenAI key to the .env file to enable them.";
+    const s = await api("/api/status");
+    state.status = s;
+    const badge = $("#mode-badge");
+    badge.textContent = s.mode === "model" ? `AI · ${s.model}` : "Offline · rules";
+    badge.title = s.mode === "model"
+      ? "Plans are understood by a language model; numbers are always computed by code."
+      : "No model available right now: plans are matched against the catalog rules.";
+    badge.classList.toggle("live", s.mode === "model");
+    if (!s.vision) {
+      $("#whiteboard-note").textContent = s.mode === "model"
+        ? "Image reading is off on this server: draw to think, then type your plan in the chat."
+        : "Offline mode: the whiteboard and photos are not read. Type your plan in the chat.";
     }
-    const sel = $("#corso");
-    s.corsi.forEach((c) => {
+    const sel = $("#course");
+    s.courses.forEach((c) => {
       const o = document.createElement("option");
       o.value = c.id;
-      o.textContent = c.nome;
+      o.textContent = c.name;
       sel.appendChild(o);
     });
-    await avviaSessione("lim-seno");
+    await startSession("lim-sine");
   } catch (e) {
-    aggiungiMsg(`The server is not responding: ${e.message}`, "buddy");
+    addMessage(`The server is not responding: ${e.message}`, "buddy");
   }
 }
 // KaTeX is loaded with "defer": start once it is ready
-document.addEventListener("DOMContentLoaded", avvio);
+document.addEventListener("DOMContentLoaded", boot);

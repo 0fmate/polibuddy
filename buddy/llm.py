@@ -1,99 +1,156 @@
-"""Unico punto che parla con il modello linguistico (OpenAI).
+"""The only place that talks to the language model.
 
-Se non c'è una chiave API, o la chiamata fallisce, le funzioni restituiscono None
-e il resto del sistema usa le regole offline. Il modello non fa mai i calcoli.
+Works with any OpenAI-compatible provider (Groq, Google Gemini, OpenRouter, OpenAI...) through
+`LLM_BASE_URL`. If there is no key, the daily budget is used up, or a call fails, the functions
+return None and the rest of the app falls back to the offline rules. The model never does the maths.
 """
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 import logging
+import threading
 from typing import TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from .config import MODELLO, REASONING_EFFORT, usa_llm  # noqa: F401 (REASONING_EFFORT usato in _extra)
+from . import config
 
-log = logging.getLogger("buddy.llm")
+log = logging.getLogger("polibuddy.llm")
 
 T = TypeVar("T", bound=BaseModel)
 
 _client = None
-ultimo_errore: str | None = None
+_lock = threading.Lock()
+_calls_today = 0
+_today = dt.date.today()
+last_error: str | None = None
 
 
-def _get_client():
+def client():
     global _client
     if _client is None:
         from openai import OpenAI
 
-        _client = OpenAI(timeout=60.0, max_retries=1)
+        kwargs = {"api_key": config.LLM_API_KEY, "timeout": 60.0, "max_retries": 1}
+        if config.LLM_BASE_URL:
+            kwargs["base_url"] = config.LLM_BASE_URL
+        _client = OpenAI(**kwargs)
     return _client
 
 
-def disponibile() -> bool:
-    return usa_llm()
+def budget_left() -> int:
+    with _lock:
+        if dt.date.today() != _today:
+            return config.DAILY_LLM_CALLS
+        return max(0, config.DAILY_LLM_CALLS - _calls_today)
 
 
-def _extra(effort: str | None = None) -> dict:
-    # reasoning_effort vale solo per i modelli di ragionamento: "off" da .env per non inviarlo
-    valore = effort or REASONING_EFFORT
-    return {} if valore.lower() == "off" else {"reasoning_effort": valore}
+def available() -> bool:
+    """A model can be used right now (key configured and daily budget not exhausted)."""
+    return config.llm_configured() and budget_left() > 0
 
 
-def _messaggi(system: str, contenuto: list | str) -> list[dict]:
-    return [{"role": "system", "content": system}, {"role": "user", "content": contenuto}]
+def count_call() -> None:
+    global _calls_today, _today
+    with _lock:
+        if dt.date.today() != _today:
+            _today, _calls_today = dt.date.today(), 0
+        _calls_today += 1
 
 
-def strutturato(system: str, contenuto: list | str, schema: type[T], max_tokens: int = 4000) -> T | None:
-    """Risposta validata contro uno schema Pydantic (structured outputs)."""
-    global ultimo_errore
-    if not disponibile():
+def _extra(effort: str | None) -> dict:
+    value = config.LLM_REASONING_EFFORT if effort is None else effort
+    return {"reasoning_effort": value} if value and value.lower() != "off" else {}
+
+
+def _messages(system: str, content: list | str) -> list[dict]:
+    return [{"role": "system", "content": system}, {"role": "user", "content": content}]
+
+
+def _fail(exc: Exception) -> None:
+    global last_error
+    last_error = f"{type(exc).__name__}: {exc}"[:500]
+    log.warning("Model call failed, using the offline rules: %s", last_error)
+
+
+def structured(system: str, content: list | str, schema: type[T], max_tokens: int = 4000) -> T | None:
+    """Reply validated against a Pydantic schema.
+
+    First tries native structured outputs (JSON schema); providers that do not support them
+    get JSON mode with the schema in the prompt, and the reply is validated here.
+    """
+    global last_error
+    if not available():
         return None
+    count_call()
     try:
-        r = _get_client().chat.completions.parse(
-            model=MODELLO,
-            messages=_messaggi(system, contenuto),
+        r = client().chat.completions.parse(
+            model=config.LLM_MODEL,
+            messages=_messages(system, content),
             response_format=schema,
             max_completion_tokens=max_tokens,
-            **_extra(),
+            **_extra(None),
         )
         msg = r.choices[0].message
-        if msg.refusal or msg.parsed is None:
-            ultimo_errore = f"nessuna risposta strutturata (refusal={msg.refusal!r})"
-            return None
-        ultimo_errore = None
-        return msg.parsed
-    except Exception as exc:  # rete, chiave, modello, limiti: si torna alle regole offline
-        ultimo_errore = f"{type(exc).__name__}: {exc}"
-        log.warning("Modello non disponibile, uso le regole offline: %s", ultimo_errore)
-        return None
+        if msg.parsed is not None and not msg.refusal:
+            last_error = None
+            return msg.parsed
+    except Exception as exc:  # noqa: BLE001 - unsupported json_schema, network, limits...
+        log.info("Native structured output unavailable (%s), trying JSON mode", type(exc).__name__)
 
-
-def testo(system: str, contenuto: list | str, max_tokens: int = 2000, effort: str | None = None) -> str | None:
-    """Risposta di solo testo. `contenuto` può includere immagini (lavagna, foto)."""
-    global ultimo_errore
-    if not disponibile():
+    if not available():
         return None
+    count_call()
+    schema_text = json.dumps(schema.model_json_schema())
     try:
-        r = _get_client().chat.completions.create(
-            model=MODELLO,
-            messages=_messaggi(system, contenuto),
+        r = client().chat.completions.create(
+            model=config.LLM_MODEL,
+            messages=_messages(f"{system}\n\nReply ONLY with a JSON object that follows this JSON schema:\n{schema_text}",
+                               content),
+            response_format={"type": "json_object"},
+            max_completion_tokens=max_tokens,
+            **_extra(None),
+        )
+        parsed = schema.model_validate_json(r.choices[0].message.content or "")
+        last_error = None
+        return parsed
+    except (ValidationError, Exception) as exc:  # noqa: BLE001
+        _fail(exc)
+        return None
+
+
+def text(system: str, content: list | str, max_tokens: int = 2000, effort: str | None = None,
+         model: str | None = None) -> str | None:
+    """Plain-text reply. `content` may include images (whiteboard, photos) with a vision model."""
+    global last_error
+    if not available():
+        return None
+    count_call()
+    try:
+        r = client().chat.completions.create(
+            model=model or config.LLM_MODEL,
+            messages=_messages(system, content),
             max_completion_tokens=max_tokens,
             **_extra(effort),
         )
         msg = r.choices[0].message
-        if msg.refusal:
-            ultimo_errore = f"refusal: {msg.refusal}"
+        if getattr(msg, "refusal", None):
+            last_error = f"refusal: {msg.refusal}"
             return None
-        ultimo_errore = None
+        last_error = None
         return (msg.content or "").strip() or None
-    except Exception as exc:
-        ultimo_errore = f"{type(exc).__name__}: {exc}"
-        log.warning("Modello non disponibile, uso le regole offline: %s", ultimo_errore)
+    except Exception as exc:  # noqa: BLE001
+        _fail(exc)
         return None
 
 
-def immagine_png(data_url_o_b64: str) -> dict:
-    """Blocco immagine per l'API OpenAI (data URL: PNG della lavagna o foto caricata)."""
-    url = data_url_o_b64 if data_url_o_b64.startswith("data:") else f"data:image/png;base64,{data_url_o_b64}"
+def image_part(data_url_or_b64: str) -> dict:
+    """Image block for the OpenAI-compatible API (data URL: whiteboard PNG or uploaded photo)."""
+    url = data_url_or_b64 if data_url_or_b64.startswith("data:") else f"data:image/png;base64,{data_url_or_b64}"
     return {"type": "image_url", "image_url": {"url": url}}
+
+
+def vision_available() -> bool:
+    return available() and bool(config.LLM_VISION_MODEL)

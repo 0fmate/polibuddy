@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PoliBuddy</title>
+  <meta name="description" content="PoliBuddy: an AI study buddy that runs your plan, even a wrong one, and lets you find the mistake yourself.">
   <link rel="icon" href="/brand/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
@@ -15,142 +16,142 @@
 <body>
   <header class="topbar">
     <div class="brand" aria-label="PoliBuddy">
-      <img class="brand-sym" src="/brand/simbolo.svg" alt="">
+      <img class="brand-sym" src="/brand/symbol.svg" alt="">
       <span class="wordmark"><span class="w-poli">Poli</span><span class="w-buddy">Buddy</span></span>
     </div>
 
     <nav class="tabs" role="tablist">
-      <button class="tab active" data-view="studente" role="tab">Student</button>
-      <button class="tab" data-view="docente" role="tab">Teacher</button>
+      <button class="tab active" data-view="student" role="tab">Student</button>
+      <button class="tab" data-view="teacher" role="tab">Teacher</button>
     </nav>
 
     <div class="top-tools">
-      <label class="campo">
+      <label class="field">
         <span>Student ID</span>
-        <input id="studente" value="demo" spellcheck="false">
+        <input id="student" value="demo" spellcheck="false">
       </label>
-      <label class="campo">
+      <label class="field">
         <span>Course</span>
-        <select id="corso"></select>
+        <select id="course"></select>
       </label>
-      <span id="badge-modo" class="badge">…</span>
+      <span id="mode-badge" class="badge">…</span>
     </div>
   </header>
 
   <!-- ============ STUDENT VIEW ============ -->
-  <main id="view-studente" class="view">
+  <main id="view-student" class="view">
     <section class="col-left">
-      <article class="card esercizio">
+      <article class="card exercise">
         <div class="card-head">
-          <span class="chip" id="es-corso">Calculus I</span>
-          <span class="chip chip-soft" id="es-tipo">Limits</span>
-          <span class="chip chip-soft" id="es-livello">Level 1</span>
+          <span class="chip" id="ex-course">Calculus I</span>
+          <span class="chip chip-soft" id="ex-topic">Limits</span>
+          <span class="chip chip-soft" id="ex-level">Level 1</span>
           <span class="muted small push">numbers personalised for your student ID</span>
         </div>
-        <div class="formula" id="es-formula"></div>
-        <pre class="codice" id="es-codice" hidden></pre>
+        <div class="formula" id="ex-formula"></div>
+        <pre class="code-block" id="ex-code" hidden></pre>
       </article>
 
       <article class="card chat">
         <div class="chat-head">
           <div class="buddy-id">
-            <img class="mascotte" id="mascotte" src="/brand/mascotte/default.svg" alt="">
+            <img class="mascot" id="mascot" src="/brand/mascot/default.svg" alt="">
             <div>
               <div class="strong">PoliBuddy</div>
-              <div class="umore" id="umore">Ready to try your idea</div>
+              <div class="mood" id="mood">Ready to try your idea</div>
             </div>
           </div>
-          <div class="corda" title="How much help PoliBuddy has given you on this exercise">
-            <img src="/brand/icone/aiuto.svg" alt="" class="ico">
-            <span class="dots" id="corda"></span>
+          <div class="rope" title="How much help PoliBuddy has given you on this exercise">
+            <img src="/brand/icons/help.svg" alt="" class="ico">
+            <span class="dots" id="rope"></span>
           </div>
         </div>
         <div class="messages" id="messages" aria-live="polite"></div>
         <div class="quick" id="quick"></div>
-        <div class="allegati-anteprima" id="anteprima" hidden></div>
+        <div class="attachments-preview" id="preview" hidden></div>
 
-        <div class="voce-pannello" id="voce" hidden>
-          <img class="voce-mascotte" id="voce-mascotte" src="/brand/mascotte/default.svg" alt="">
-          <div class="voce-centro">
-            <div class="voce-stato" id="voce-stato">Listening…</div>
-            <div class="voce-onde" id="voce-onde"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            <div class="muted small" id="voce-ultimo"></div>
+        <div class="voice-panel" id="voice" hidden>
+          <img class="voice-mascot" id="voice-mascot" src="/brand/mascot/default.svg" alt="">
+          <div class="voice-center">
+            <div class="voice-status" id="voice-status">Listening…</div>
+            <div class="voice-waves" id="voice-waves"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="muted small" id="voice-last"></div>
           </div>
-          <div class="voce-azioni">
-            <button type="button" class="btn btn-soft" id="voce-fine-turno">I'm done talking</button>
-            <button type="button" class="btn btn-accent" id="voce-chiudi">End conversation</button>
+          <div class="voice-actions">
+            <button type="button" class="btn btn-soft" id="voice-end-turn">I'm done talking</button>
+            <button type="button" class="btn btn-accent" id="voice-close">End conversation</button>
           </div>
         </div>
 
         <form class="composer" id="composer">
           <button type="button" class="clip" id="clip" title="Attach photos or documents">
-            <img src="/brand/icone/materiale.svg" alt="Attach">
+            <img src="/brand/icons/material.svg" alt="Attach">
           </button>
           <button type="button" class="clip mic" id="mic" title="Talk with PoliBuddy">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>
           </button>
           <input type="file" id="file" multiple accept="image/*,.pdf,.txt,.md,.py,.csv,.json" hidden>
           <textarea id="input" rows="2" placeholder="Explain how you would solve it… (Enter to send)"></textarea>
-          <button type="submit" class="btn btn-primary" id="invia">Send</button>
+          <button type="submit" class="btn btn-primary" id="send">Send</button>
         </form>
-        <label class="attach"><input type="checkbox" id="allega"> also attach the whiteboard</label>
+        <label class="attach"><input type="checkbox" id="attach-board"> also attach the whiteboard</label>
       </article>
     </section>
 
     <section class="col-right">
-      <article class="card progressi-card">
+      <article class="card progress-card">
         <div class="card-title-row">
-          <h2><img src="/brand/icone/progressi.svg" alt="" class="ico"> Your progress in <span id="prog-corso">Calculus I</span></h2>
+          <h2><img src="/brand/icons/progress.svg" alt="" class="ico"> Your progress in <span id="progress-course">Calculus I</span></h2>
           <span class="muted small">click a topic to practise</span>
         </div>
-        <div class="progressi" id="progressi"></div>
+        <div class="progress-list" id="progress"></div>
       </article>
 
-      <article class="card lavagna-card">
+      <article class="card whiteboard-card">
         <div class="card-title-row">
-          <h2><img src="/brand/icone/lavagna.svg" alt="" class="ico"> Shared whiteboard</h2>
+          <h2><img src="/brand/icons/whiteboard.svg" alt="" class="ico"> Shared whiteboard</h2>
           <div class="tools">
             <button class="tool active" data-pen="ink" title="Pen"><span class="dot dot-ink"></span></button>
             <button class="tool" data-pen="accent" title="Highlighter"><span class="dot dot-accent"></span></button>
             <button class="tool" data-pen="eraser" title="Eraser">⌫</button>
-            <button class="tool" id="pulisci" title="Clear">Clear</button>
+            <button class="tool" id="clear-board" title="Clear">Clear</button>
           </div>
         </div>
-        <div class="canvas-wrap"><canvas id="lavagna"></canvas></div>
-        <p class="muted small" id="lavagna-nota">Write your plan here: PoliBuddy reads it and repeats it back before running it.</p>
+        <div class="canvas-wrap"><canvas id="whiteboard"></canvas></div>
+        <p class="muted small" id="whiteboard-note">Write your plan here: PoliBuddy reads it and repeats it back before running it.</p>
       </article>
 
-      <article class="card risultati">
+      <article class="card results">
         <div class="card-title-row">
-          <h2><img src="/brand/icone/ragionamento.svg" alt="" class="ico"> Let's try it your way</h2>
-          <span class="verdict" id="verdetto" hidden></span>
+          <h2><img src="/brand/icons/reasoning.svg" alt="" class="ico"> Let's try it your way</h2>
+          <span class="verdict" id="verdict" hidden></span>
         </div>
-        <div class="empty" id="risultati-vuoti">
-          <img src="/brand/mascotte/studio.svg" alt="" class="empty-mascotte">
+        <div class="empty" id="results-empty">
+          <img src="/brand/mascot/studying.svg" alt="" class="empty-mascot">
           <p>When you confirm your plan, the real numbers show up here:<br>computed by code, never made up by the model.</p>
         </div>
-        <div id="risultati-body" hidden>
-          <div class="confronto">
+        <div id="results-body" hidden>
+          <div class="compare">
             <div class="stat">
-              <span class="stat-label" id="lab-previsto">your plan predicts</span>
-              <span class="stat-value tuo" id="val-previsto">—</span>
+              <span class="stat-label" id="predicted-label">your plan predicts</span>
+              <span class="stat-value yours" id="predicted-value">—</span>
             </div>
             <div class="stat">
-              <span class="stat-label" id="lab-tendenza">the numbers approach</span>
-              <span class="stat-value vero" id="val-tendenza">—</span>
+              <span class="stat-label" id="observed-label">the numbers approach</span>
+              <span class="stat-value true" id="observed-value">—</span>
             </div>
           </div>
-          <div class="grid-ris">
-            <div class="tabella-wrap">
-              <table class="tabella" id="tabella"><thead></thead><tbody></tbody></table>
+          <div class="results-grid">
+            <div class="table-wrap">
+              <table class="results-table" id="results-table"><thead></thead><tbody></tbody></table>
             </div>
-            <div class="grafico">
-              <svg id="grafico" viewBox="0 0 440 270" role="img" aria-label="Chart comparing your plan with the true values"></svg>
-              <div class="legenda" id="legenda"></div>
+            <div class="chart">
+              <svg id="chart" viewBox="0 0 440 270" role="img" aria-label="Chart comparing your plan with the true values"></svg>
+              <div class="legend" id="legend"></div>
             </div>
           </div>
-          <div class="azioni-ris">
-            <button class="btn btn-accent" id="prossimo" hidden>Next exercise →</button>
+          <div class="results-actions">
+            <button class="btn btn-accent" id="next" hidden>Next exercise →</button>
           </div>
         </div>
       </article>
@@ -158,53 +159,53 @@
   </main>
 
   <!-- ============ TEACHER VIEW ============ -->
-  <main id="view-docente" class="view-docente" hidden>
-    <div class="docente-top">
+  <main id="view-teacher" class="view-teacher" hidden>
+    <div class="teacher-top">
       <div>
-        <h1><span id="d-corso">Calculus I</span> · where the class gets stuck</h1>
-        <p class="muted" id="docente-nota">Anonymous, aggregated data.</p>
+        <h1><span id="t-course">Calculus I</span> · where the class gets stuck</h1>
+        <p class="muted" id="teacher-note">Anonymous, aggregated data.</p>
       </div>
-      <div class="segmented" id="d-corsi" role="tablist" aria-label="Course"></div>
+      <div class="segmented" id="t-courses" role="tablist" aria-label="Course"></div>
     </div>
 
     <div class="kpis">
-      <div class="card kpi"><img src="/brand/icone/classe.svg" alt="" class="kpi-ico"><div><span class="kpi-label">sessions</span><span class="kpi-value" id="k-sessioni">—</span></div></div>
-      <div class="card kpi"><img src="/brand/icone/progressi.svg" alt="" class="kpi-ico"><div><span class="kpi-label">solved on the first try</span><span class="kpi-value" id="k-primo">—</span></div></div>
-      <div class="card kpi"><img src="/brand/icone/ragionamento.svg" alt="" class="kpi-ico"><div><span class="kpi-label">mistakes found alone</span><span class="kpi-value" id="k-solo">—</span></div></div>
-      <div class="card kpi kpi-critico"><img src="/brand/icone/aiuto.svg" alt="" class="kpi-ico"><div><span class="kpi-label">most critical topic</span><span class="kpi-value small-v" id="k-critico">—</span></div></div>
+      <div class="card kpi"><img src="/brand/icons/class.svg" alt="" class="kpi-ico"><div><span class="kpi-label">sessions</span><span class="kpi-value" id="k-sessions">—</span></div></div>
+      <div class="card kpi"><img src="/brand/icons/progress.svg" alt="" class="kpi-ico"><div><span class="kpi-label">solved on the first try</span><span class="kpi-value" id="k-first">—</span></div></div>
+      <div class="card kpi"><img src="/brand/icons/reasoning.svg" alt="" class="kpi-ico"><div><span class="kpi-label">mistakes found alone</span><span class="kpi-value" id="k-alone">—</span></div></div>
+      <div class="card kpi kpi-critical"><img src="/brand/icons/help.svg" alt="" class="kpi-ico"><div><span class="kpi-label">most critical topic</span><span class="kpi-value small-v" id="k-critical">—</span></div></div>
     </div>
 
-    <div class="docente-grid">
+    <div class="teacher-grid">
       <article class="card">
         <div class="card-title-row">
-          <h2><img src="/brand/icone/radar_docente.svg" alt="" class="ico"> Pass rate by exercise type</h2>
-          <div class="legenda-esiti" id="legenda-esiti"></div>
+          <h2><img src="/brand/icons/teacher_radar.svg" alt="" class="ico"> Outcomes by exercise</h2>
+          <div class="outcome-legend" id="outcome-legend"></div>
         </div>
-        <div id="barre"></div>
+        <div id="bars"></div>
       </article>
 
-      <article class="card lacune">
-        <div class="lacune-head">
-          <img src="/brand/mascotte/riflessione.svg" alt="" class="lacune-mascotte">
+      <article class="card gaps">
+        <div class="gaps-head">
+          <img src="/brand/mascot/thinking.svg" alt="" class="gaps-mascot">
           <div>
             <h2>Review in class</h2>
             <p class="muted small">the mistakes the class struggles to find alone</p>
           </div>
         </div>
-        <div id="lacune"></div>
-        <p class="privacy"><img src="/brand/icone/privacy.svg" alt="" class="ico"> <span id="privacy-testo"></span></p>
+        <div id="gaps"></div>
+        <p class="privacy"><img src="/brand/icons/privacy.svg" alt="" class="ico"> <span id="privacy-text"></span></p>
       </article>
     </div>
 
     <article class="card crash">
       <div class="card-title-row">
-        <h2><img src="/brand/icone/crash_test.svg" alt="" class="ico"> Crash Test on the data</h2>
+        <h2><img src="/brand/icons/crash_test.svg" alt="" class="ico"> Crash Test on the data</h2>
         <span class="muted small">the exam draft against this term's sessions · the teacher always decides</span>
       </div>
       <div class="crash-grid">
         <div>
-          <label class="muted small" for="domande">Exam draft, one question per line</label>
-          <textarea id="domande" rows="7"></textarea>
+          <label class="muted small" for="questions">Exam draft, one question per line</label>
+          <textarea id="questions" rows="7"></textarea>
           <button class="btn btn-primary" id="crash-btn">Test the exam draft</button>
           <p class="muted small">Questions are linked to concepts by keywords.</p>
         </div>

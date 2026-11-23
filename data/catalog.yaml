@@ -1,0 +1,317 @@
+# PoliBuddy catalog: courses, concepts, exercises and typical mistakes.
+#
+# Three engines:
+#   limit  -> the plan is a substitution (e.g. sin 3x ~ 3x); we compute the limit and a table near 0
+#   value  -> the plan is a value or a formula (e.g. t = v0/g); we check what happens with that value
+#   trace  -> the program is run step by step by OUR simulator (never the student's code)
+#
+# Placeholders: {param} = the student's value; {ax} = "3x" (or "x" when a = 1).
+# Text shown in chat uses LaTeX between $...$ (single-quoted YAML strings keep backslashes as they are).
+# Keywords ending with * are prefixes (thrown* matches "thrown"). Slides are placeholders.
+
+courses:
+  calculus1: {name: "Calculus I"}
+  physics1: {name: "Physics I"}
+  cs: {name: "Computer Science"}
+
+concepts:
+  taylor-cosine: {name: "Taylor expansion of cosine", keywords: ["cos", "cosine"]}
+  taylor-sine: {name: "Taylor expansion of sine", keywords: ["sin", "sine"]}
+  taylor-exponential: {name: "Taylor expansion of the exponential", keywords: ["e^", "exp", "exponential"]}
+  taylor-tangent: {name: "Taylor expansion of tangent", keywords: ["tan", "tangent"]}
+  vertical-motion: {name: "Uniformly accelerated motion", keywords: ["thrown*", "throw*", "upward*", "back to the ground"]}
+  free-fall: {name: "Free fall and energy", keywords: ["falls", "dropped", "free fall", "from rest", "hits the ground"]}
+  for-range: {name: "For loops and range", keywords: ["range"]}
+  while-loops: {name: "While loops", keywords: ["while"]}
+
+exercises:
+  # ---------------------------------------------------------------- Calculus I
+  - id: lim-cosine
+    course: calculus1
+    engine: limit
+    title: "Limit with cosine"
+    topic: "Limits with Taylor"
+    level: 1
+    concepts: [taylor-cosine]
+    params: {a: [1, 2, 3]}
+    demo: {a: 2}
+    expression: "(1 - cos(a*x))/x**2"
+    latex: '\lim_{x \to 0} \frac{1 - \cos({ax})}{x^2}'
+    text: 'Compute $\displaystyle\lim_{x \to 0} \frac{1 - \cos {ax}}{x^2}$'
+    demo_plan: "Near zero cos {ax} is about 1, so the numerator is zero and the limit is 0"
+    slide: "Taylor expansions: cosine (link the course slide here)"
+    mistakes:
+      - id: cosine-order-zero
+        name: "Cosine approximated with 1"
+        substitutions: [{from: "cos(a*x)", to: "1"}]
+        targeted_question: 'When you put $1$ in place of $\cos {ax}$, which piece are you throwing away? And how big is it compared to $x^2$ in the denominator?'
+        hint: 'Try keeping one more term in the expansion of $\cos {ax}$.'
+    offline_rules:
+      - all: ["cos"]
+        any: ["x^2", "squared", "secondorder", "/2"]
+        substitutions: [{from: "cos(a*x)", to: "1 - (a*x)**2/2"}]
+        paraphrase: 'So you want to replace $\cos {ax}$ with $1 - \frac{({ax})^2}{2}$ and then simplify, right?'
+      - all: ["cos"]
+        any: ["1", "one"]
+        substitutions: [{from: "cos(a*x)", to: "1"}]
+        paraphrase: 'So you want to replace $\cos {ax}$ with $1$, so the numerator becomes zero, right?'
+    forbidden: ["/2", "second order", "x^2/2", "frac{"]
+
+  - id: lim-sine
+    course: calculus1
+    engine: limit
+    title: "Limit with sine"
+    topic: "Limits with Taylor"
+    level: 2
+    concepts: [taylor-sine]
+    params: {a: [2, 3, 4]}
+    demo: {a: 3}
+    expression: "(a*x - sin(a*x))/x**3"
+    latex: '\lim_{x \to 0} \frac{{ax} - \sin({ax})}{x^3}'
+    text: 'Compute $\displaystyle\lim_{x \to 0} \frac{{ax} - \sin {ax}}{x^3}$'
+    demo_plan: "Near zero sin {ax} is about {ax}, so the numerator is zero and the limit is 0"
+    slide: "Taylor expansions: sine (link the course slide here)"
+    mistakes:
+      - id: sine-first-order
+        name: "Taylor of sine stopped at first order"
+        substitutions: [{from: "sin(a*x)", to: "a*x"}]
+        targeted_question: 'When you replaced $\sin {ax}$ with ${ax}$, what did you throw away? How big is that piece compared to $x^3$?'
+        hint: 'Try keeping one more term in the expansion of $\sin {ax}$.'
+    offline_rules:
+      - all: ["sin"]
+        any: ["x^3", "cube", "cubed", "third", "/6"]
+        substitutions: [{from: "sin(a*x)", to: "a*x - (a*x)**3/6"}]
+        paraphrase: 'So you want to replace $\sin {ax}$ with ${ax} - \frac{({ax})^3}{6}$ and then simplify, right?'
+      - all: ["sin"]
+        any: ["{ax}", "about", "≈", "~", "equal", "approx"]
+        substitutions: [{from: "sin(a*x)", to: "a*x"}]
+        paraphrase: 'So you want to replace $\sin {ax}$ with ${ax}$, so the numerator becomes zero, right?'
+    forbidden: ["/6", "third order", "x^3/6", "9/2", "frac{"]
+
+  - id: lim-exponential
+    course: calculus1
+    engine: limit
+    title: "Limit with exponential"
+    topic: "Limits with Taylor"
+    level: 2
+    concepts: [taylor-exponential]
+    params: {a: [1, 2, 3]}
+    demo: {a: 2}
+    expression: "(exp(a*x) - 1 - a*x)/x**2"
+    latex: '\lim_{x \to 0} \frac{e^{{ax}} - 1 - {ax}}{x^2}'
+    text: 'Compute $\displaystyle\lim_{x \to 0} \frac{e^{{ax}} - 1 - {ax}}{x^2}$'
+    demo_plan: "e^({ax}) is about 1 + {ax}, so the numerator is zero and the limit is 0"
+    slide: "Taylor expansions: exponential (link the course slide here)"
+    mistakes:
+      - id: exponential-first-order
+        name: "Exponential stopped at first order"
+        substitutions: [{from: "exp(a*x)", to: "1 + a*x"}]
+        targeted_question: 'When you write $e^{{ax}}$ as $1 + {ax}$, what is left out? How big is it compared to $x^2$?'
+        hint: 'Try keeping one more term in the expansion of $e^{{ax}}$.'
+    offline_rules:
+      - any: ["x^2", "squared", "second"]
+        requires_any: ["e^", "exp", "exponential"]
+        substitutions: [{from: "exp(a*x)", to: "1 + a*x + (a*x)**2/2"}]
+        paraphrase: 'So you want to replace $e^{{ax}}$ with $1 + {ax} + \frac{({ax})^2}{2}$, right?'
+      - any: ["1+", "oneplus"]
+        requires_any: ["e^", "exp", "exponential"]
+        substitutions: [{from: "exp(a*x)", to: "1 + a*x"}]
+        paraphrase: 'So you want to replace $e^{{ax}}$ with $1 + {ax}$, right?'
+    forbidden: ["/2", "second order", "x^2/2", "frac{"]
+
+  - id: lim-tangent
+    course: calculus1
+    engine: limit
+    title: "Tangent minus sine"
+    topic: "Limits with Taylor"
+    level: 3
+    concepts: [taylor-tangent, taylor-sine]
+    params: {a: [1, 2]}
+    demo: {a: 1}
+    expression: "(tan(a*x) - sin(a*x))/x**3"
+    latex: '\lim_{x \to 0} \frac{\tan({ax}) - \sin({ax})}{x^3}'
+    text: 'Compute $\displaystyle\lim_{x \to 0} \frac{\tan {ax} - \sin {ax}}{x^3}$'
+    demo_plan: "tan {ax} and sin {ax} are both about {ax}, so the numerator is zero"
+    slide: "Taylor expansions: sine and tangent (link the course slide here)"
+    mistakes:
+      - id: tangent-sine-first-order
+        name: "Tangent and sine stopped at first order"
+        substitutions: [{from: "tan(a*x)", to: "a*x"}, {from: "sin(a*x)", to: "a*x"}]
+        targeted_question: 'If tangent and sine are both ${ax}$, the numerator is zero. But are they really equal up to $x^3$?'
+        hint: 'Try expanding tangent and sine up to the $x^3$ term.'
+    offline_rules:
+      - all: ["tan", "sin"]
+        any: ["x^3", "cube", "cubed", "third"]
+        substitutions: [{from: "tan(a*x)", to: "a*x + (a*x)**3/3"}, {from: "sin(a*x)", to: "a*x - (a*x)**3/6"}]
+        paraphrase: 'So you want to expand tangent and sine up to the $x^3$ term, right?'
+      - all: ["tan", "sin"]
+        any: ["{ax}", "about", "≈", "~", "equal", "approx"]
+        substitutions: [{from: "tan(a*x)", to: "a*x"}, {from: "sin(a*x)", to: "a*x"}]
+        paraphrase: 'So you want to replace both $\tan {ax}$ and $\sin {ax}$ with ${ax}$, right?'
+    forbidden: ["/3", "/6", "third order", "x^3/3", "frac{"]
+
+  # ---------------------------------------------------------------- Physics I
+  - id: phys-throw
+    course: physics1
+    engine: value
+    title: "Vertical throw"
+    topic: "Kinematics"
+    level: 1
+    concepts: [vertical-motion]
+    params: {v0: [15, 20, 25]}
+    demo: {v0: 20}
+    constants: {g: 9.81}
+    text: 'A ball is thrown straight up at $v_0 = {v0}\ \mathrm{m/s}$. After how many seconds does it land? ($g = 9.81\ \mathrm{m/s^2}$)'
+    demo_plan: "It lands after t = v0/g, when the velocity becomes zero"
+    variable: t
+    answer: "2*v0/g"
+    observable: "v0*t - g*t**2/2"
+    target: "0"
+    unit: "s"
+    observable_unit: "m"
+    columns: ["t (s)", "height (m)", ""]
+    row_note: "← your time"
+    predicted_label: "you say it lands after"
+    observed_label: "at that time the ball is at"
+    x_label: "time (s)"
+    curve_label: "height of the ball"
+    target_label: "ground"
+    contradiction_line: 'If you were right, at $t = {predicted}$ the ball should be on the ground. Instead, look at the table: at that time it is still {observed} high.'
+    still_wrong_line: 'at your time the ball is still {observed} high, not on the ground.'
+    works_line: 'at $t = {predicted}$ the height is {observed}: the ball is exactly on the ground.'
+    slide: "Uniformly accelerated motion: the equation of motion (link the course slide here)"
+    mistakes:
+      - id: time-to-top
+        name: "Time to the top mistaken for flight time"
+        value: "v0/g"
+        targeted_question: 'At the moment the velocity becomes zero, where is the ball: on the ground or somewhere else?'
+        hint: 'Try writing the height as a function of time, $h(t)$, and ask yourself when it is zero again.'
+    offline_rules:
+      - any: ["2v0", "2*v0", "2{v0}", "2*{v0}", "twice", "double"]
+        value: "2*v0/g"
+        paraphrase: 'So you say it lands after $t = \frac{2 v_0}{g}$, about {value}, right?'
+      - any: ["v0/g", "{v0}/g", "{v0}/9", "velocitybecomeszero", "velocityiszero", "velocityzero", "speediszero"]
+        value: "v0/g"
+        paraphrase: 'So you say it lands after $t = \frac{v_0}{g}$, about {value}, right?'
+    forbidden: ["twice", "double", "2v_0", "round trip"]
+
+  - id: phys-fall
+    course: physics1
+    engine: value
+    title: "Free fall"
+    topic: "Energy"
+    level: 2
+    concepts: [free-fall]
+    params: {h: [20, 45, 80]}
+    demo: {h: 20}
+    constants: {g: 9.81}
+    text: 'A stone is dropped from rest from $h = {h}\ \mathrm{m}$. How fast is it going when it hits the ground? ($g = 9.81\ \mathrm{m/s^2}$)'
+    demo_plan: "I use v = square root of g times h, so about 14 m/s"
+    variable: v
+    answer: "sqrt(2*g*h)"
+    observable: "v**2/(2*g)"
+    target: "h"
+    unit: "m/s"
+    observable_unit: "m"
+    columns: ["speed (m/s)", "fall needed (m)", ""]
+    row_note: "← your speed"
+    predicted_label: "you say it lands at"
+    observed_label: "that speed only needs a fall of"
+    x_label: "speed (m/s)"
+    curve_label: "fall needed"
+    target_label: "starting height"
+    contradiction_line: 'If you were right, to reach {predicted} the stone should fall from {h} m. Instead, with that speed the fall needed is only {observed}.'
+    still_wrong_line: 'with your speed the fall needed is {observed}, not {h} m.'
+    works_line: 'with {predicted} the fall needed is exactly {observed}.'
+    slide: "Conservation of mechanical energy (link the course slide here)"
+    mistakes:
+      - id: root-without-two
+        name: 'Factor 2 forgotten in $v = \sqrt{2gh}$'
+        value: "sqrt(g*h)"
+        targeted_question: 'Is kinetic energy $m v^2$, or something else? What changes in your formula?'
+        hint: 'Try setting the initial potential energy equal to the final kinetic energy, with every factor.'
+    offline_rules:
+      - any: ["2gh", "2*g*h", "2g*h", "2*9.81", "2timesg"]
+        value: "sqrt(2*g*h)"
+        paraphrase: 'So you say $v = \sqrt{2 g h}$, about {value}, right?'
+      - any: ["squarerootofg", "sqrt(gh)", "sqrt(g*h)", "√(gh)", "√gh", "√(g*h)", "gtimesh", "sqrtgh"]
+        value: "sqrt(g*h)"
+        paraphrase: 'So you say $v = \sqrt{g h}$, about {value}, right?'
+    forbidden: ["1/2", "factor 2", "2gh", "one half", "frac{1}{2}"]
+
+  # ---------------------------------------------------------------- Computer Science
+  - id: cs-range
+    course: cs
+    engine: trace
+    simulator: range_sum
+    title: "Sum with range"
+    topic: "For loops"
+    level: 1
+    concepts: [for-range]
+    params: {n: [6, 10, 11]}
+    demo: {n: 10}
+    text: "What is the value of s at the end?"
+    code: "s = 0\nfor i in range(1, {n}):\n    s = s + i\nprint(s)"
+    demo_plan: "i goes from 1 to {n}, so s = {n}·({n}+1)/2"
+    answer: "n*(n-1)/2"
+    columns: ["step", "i", "s"]
+    predicted_label: "you say at the end s is"
+    observed_label: "the program actually prints"
+    x_label: "step"
+    curve_label: "value of s"
+    contradiction_line: 'If you were right, at the end we should read $s = {predicted}$. Instead, running the program step by step gives {observed}.'
+    still_wrong_line: 'your value is {predicted}, but the program prints {observed}.'
+    works_line: 'the program prints exactly {observed}.'
+    slide: "The for loop and the range function (link the course slide here)"
+    mistakes:
+      - id: range-inclusive
+        name: "range(1, n) believed to include n"
+        value: "n*(n+1)/2"
+        targeted_question: 'In the table, what is the last value that $i$ takes? Is it the one you expected?'
+        hint: 'Reread what the second argument of range does: is it ever reached?'
+    offline_rules:
+      - any: ["excluded", "exclusive", "n-1", "n(n-1)", "{n}-1", "notincluded", "stopsbefore"]
+        value: "n*(n-1)/2"
+        paraphrase: 'So you say $i$ stops before {n} and at the end $s = {value}$, right?'
+      - any: ["n(n+1)", "({n}+1)", "{n}+1", "to{n}", "upto{n}", "1to{n}", "included", "inclusive"]
+        value: "n*(n+1)/2"
+        paraphrase: 'So you say $i$ goes from 1 to {n} included and at the end $s = {value}$, right?'
+    forbidden: ["excluded", "exclusive", "n-1", "never reached", "not included"]
+
+  - id: cs-while
+    course: cs
+    engine: trace
+    simulator: while_count
+    title: "How many iterations?"
+    topic: "While loops"
+    level: 2
+    concepts: [while-loops]
+    params: {n: [7, 9, 11]}
+    demo: {n: 7}
+    text: "How many times does the loop body run, i.e. what does it print?"
+    code: "i = 0\ncount = 0\nwhile i < {n}:\n    count = count + 1\n    i = i + 2\nprint(count)"
+    demo_plan: "Each time i grows by 2, so the loop runs {n}/2 times, taking the integer part"
+    answer: "ceiling(n/2)"
+    columns: ["step", "i before the check", "count"]
+    predicted_label: "you say it prints"
+    observed_label: "the program actually prints"
+    x_label: "step"
+    curve_label: "value of count"
+    contradiction_line: 'If you were right, we should read {predicted}. Instead, running the program gives {observed}.'
+    still_wrong_line: 'your value is {predicted}, but the program prints {observed}.'
+    works_line: 'the program prints exactly {observed}.'
+    slide: "The while loop and its exit condition (link the course slide here)"
+    mistakes:
+      - id: integer-division
+        name: "Integer part instead of rounding up"
+        value: "floor(n/2)"
+        targeted_question: 'Look at the $i$ column in the table: what is the last value for which $i < {n}$ is still true?'
+        hint: 'Count how many times the condition is true, starting from $i = 0$.'
+    offline_rules:
+      - any: ["roundup", "roundedup", "ceil", "+1"]
+        value: "ceiling(n/2)"
+        paraphrase: 'So you say the loop runs $\lceil {n}/2 \rceil$ times, that is {value}, right?'
+      - any: ["n/2", "{n}/2", "n//2", "{n}//2", "half", "integerpart"]
+        value: "floor(n/2)"
+        paraphrase: 'So you say the loop runs ${n}/2$ times, taking the integer part: {value}, right?'
+    forbidden: ["round up", "ceil", "rounded up", "still true"]

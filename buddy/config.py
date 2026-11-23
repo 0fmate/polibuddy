@@ -1,4 +1,4 @@
-"""Configurazione: legge .env (se c'è) e le variabili d'ambiente."""
+"""Settings: read from `.env` (if present) and from environment variables."""
 
 from __future__ import annotations
 
@@ -8,46 +8,58 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 RUNTIME_DIR = DATA_DIR / "runtime"
-CATALOGO_PATH = DATA_DIR / "catalogo.yaml"
+CATALOG_PATH = DATA_DIR / "catalog.yaml"
 
 
-def _carica_env() -> None:
+def _load_dotenv() -> None:
     env = ROOT / ".env"
     if not env.exists():
         return
-    for riga in env.read_text(encoding="utf-8").splitlines():
-        riga = riga.strip()
-        if not riga or riga.startswith("#") or "=" not in riga:
+    for line in env.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        chiave, valore = riga.split("=", 1)
-        os.environ.setdefault(chiave.strip(), valore.strip().strip('"').strip("'"))
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-_carica_env()
-
-# Modello OpenAI: il default è quello degli esempi degli organizzatori; si cambia da .env.
-MODELLO = os.environ.get("BUDDY_MODEL", "gpt-6-luna")
-# Ragionamento del modello (gpt-6-luna accetta none/low/medium/high/xhigh). "off" = non inviato.
-# L'interprete ragiona un po' ("low"); le battute del compagno sono solo riformulazioni ("none").
-REASONING_EFFORT = os.environ.get("BUDDY_REASONING_EFFORT", "").strip() or "low"
-REASONING_EFFORT_COMPAGNO = os.environ.get("BUDDY_REASONING_EFFORT_COMPAGNO", "").strip() or "none"
-# "auto" usa il modello se c'è una chiave, altrimenti le regole offline.
-MODALITA = os.environ.get("BUDDY_MODE", "auto").lower()
-
-# Soglia minima di sessioni sotto cui il docente non vede il dato.
-SOGLIA_RADAR = int(os.environ.get("BUDDY_SOGLIA", "10"))
-
-# Quanta corda: livelli di aiuto dopo ogni tentativo fallito.
-# 1 = contraddizione + "dove l'abbiamo perso?", 2 = domanda mirata, 3 = slide, 4 = spunto.
-LIVELLO_AIUTO_MAX = 4
-
-# Punti in cui il compagno calcola i valori (avvicinandosi a zero).
-PUNTI_TABELLA = ["0.1", "0.01", "0.001", "0.0001"]
-# Precisione di mpmath: con i float normali il numeratore sparisce per x piccoli.
-PRECISIONE_CIFRE = 60
+_load_dotenv()
 
 
-def usa_llm() -> bool:
-    if MODALITA == "offline":
-        return False
-    return bool(os.environ.get("OPENAI_API_KEY"))
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, "").strip() or default
+
+
+# --- Language model: any OpenAI-compatible provider (Groq, Gemini, OpenRouter, OpenAI...) ---
+LLM_API_KEY = _env("LLM_API_KEY") or _env("OPENAI_API_KEY")
+LLM_BASE_URL = _env("LLM_BASE_URL")  # empty = OpenAI
+LLM_MODEL = _env("LLM_MODEL", "openai/gpt-oss-120b")
+LLM_VISION_MODEL = _env("LLM_VISION_MODEL")  # for whiteboard and photos; empty = image reading off
+LLM_REASONING_EFFORT = _env("LLM_REASONING_EFFORT")  # only for reasoning models (e.g. "low"); empty = not sent
+STT_MODEL = _env("STT_MODEL")  # speech-to-text; empty = the browser's speech recognition
+TTS_MODEL = _env("TTS_MODEL")  # text-to-speech; empty = the browser's speech synthesis
+TTS_VOICE = _env("TTS_VOICE", "alloy")
+
+# "auto" uses the model when a key is set, otherwise the offline rules. "offline" = always rules.
+MODE = _env("BUDDY_MODE", "auto").lower()
+REPHRASE = _env("BUDDY_REPHRASE", "1") != "0"
+
+# --- Public demo protection ---
+RATE_LIMIT_PER_MINUTE = int(_env("RATE_LIMIT_PER_MINUTE", "12"))  # requests per IP to the AI endpoints
+DAILY_LLM_CALLS = int(_env("DAILY_LLM_CALLS", "600"))  # past this, the app switches to offline rules until tomorrow
+
+# Teacher view: below this number of sessions a figure is not shown.
+MIN_SESSIONS = int(_env("BUDDY_MIN_SESSIONS", "10"))
+
+# How much help: levels after each failed plan.
+# 1 = contradiction, 2 = targeted question, 3 = slide, 4 = hint.
+MAX_HELP_LEVEL = 4
+
+# Points where the engine evaluates the function, getting closer to zero.
+TABLE_POINTS = ["0.1", "0.01", "0.001", "0.0001"]
+# mpmath precision: with ordinary floats the numerator vanishes for small x.
+PRECISION_DIGITS = 60
+
+
+def llm_configured() -> bool:
+    return MODE != "offline" and bool(LLM_API_KEY)
