@@ -8,7 +8,7 @@
 
 Built in a team for the **Reply Student Tech Clash 2026 · AI on Campus** (Politecnico di Torino).
 
-**Live demo:** _add the Render URL here_ · the free instance sleeps when idle, so the first load can take about a minute.
+**▶ Live demo: [polibuddy.onrender.com](https://polibuddy.onrender.com)** · no sign-up, no key: click the suggested plan, confirm it and watch the numbers disagree. Then open the Teacher tab.
 
 ![PoliBuddy student view](docs/screenshots/student_calculus.png)
 
